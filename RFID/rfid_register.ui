@@ -1,0 +1,298 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Dialog</class>
+ <widget class="QDialog" name="Dialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>857</width>
+    <height>534</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Dialog</string>
+  </property>
+  <widget class="QLabel" name="label">
+   <property name="geometry">
+    <rect>
+     <x>20</x>
+     <y>20</y>
+     <width>66</width>
+     <height>18</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>UID</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="label_2">
+   <property name="geometry">
+    <rect>
+     <x>20</x>
+     <y>50</y>
+     <width>66</width>
+     <height>18</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>이름</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="label_3">
+   <property name="geometry">
+    <rect>
+     <x>20</x>
+     <y>80</y>
+     <width>66</width>
+     <height>18</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>생년월일</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="label_4">
+   <property name="geometry">
+    <rect>
+     <x>20</x>
+     <y>110</y>
+     <width>66</width>
+     <height>18</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>차량 S/N</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="label_5">
+   <property name="geometry">
+    <rect>
+     <x>20</x>
+     <y>140</y>
+     <width>66</width>
+     <height>18</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>키</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="label_6">
+   <property name="geometry">
+    <rect>
+     <x>20</x>
+     <y>170</y>
+     <width>66</width>
+     <height>18</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>몸무게</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="label_7">
+   <property name="geometry">
+    <rect>
+     <x>20</x>
+     <y>200</y>
+     <width>66</width>
+     <height>18</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>전화번호</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="label_8">
+   <property name="geometry">
+    <rect>
+     <x>20</x>
+     <y>230</y>
+     <width>66</width>
+     <height>18</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>면허번호</string>
+   </property>
+  </widget>
+  <widget class="QLineEdit" name="editUid">
+   <property name="geometry">
+    <rect>
+     <x>90</x>
+     <y>20</y>
+     <width>113</width>
+     <height>26</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QLineEdit" name="editName">
+   <property name="geometry">
+    <rect>
+     <x>90</x>
+     <y>50</y>
+     <width>113</width>
+     <height>26</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QLineEdit" name="editSn">
+   <property name="geometry">
+    <rect>
+     <x>90</x>
+     <y>110</y>
+     <width>113</width>
+     <height>26</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QLineEdit" name="editPhone">
+   <property name="geometry">
+    <rect>
+     <x>90</x>
+     <y>200</y>
+     <width>113</width>
+     <height>26</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QLineEdit" name="editLicense">
+   <property name="geometry">
+    <rect>
+     <x>90</x>
+     <y>230</y>
+     <width>113</width>
+     <height>26</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QLineEdit" name="editHeight">
+   <property name="geometry">
+    <rect>
+     <x>90</x>
+     <y>140</y>
+     <width>113</width>
+     <height>26</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QLineEdit" name="editWeight">
+   <property name="geometry">
+    <rect>
+     <x>90</x>
+     <y>170</y>
+     <width>113</width>
+     <height>26</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QDateEdit" name="editBirth">
+   <property name="geometry">
+    <rect>
+     <x>90</x>
+     <y>80</y>
+     <width>111</width>
+     <height>27</height>
+    </rect>
+   </property>
+   <property name="displayFormat">
+    <string>yyyyMMdd</string>
+   </property>
+   <property name="calendarPopup">
+    <bool>true</bool>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="btnRegister">
+   <property name="geometry">
+    <rect>
+     <x>450</x>
+     <y>230</y>
+     <width>181</width>
+     <height>26</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>등록</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="labelStatus">
+   <property name="geometry">
+    <rect>
+     <x>270</x>
+     <y>20</y>
+     <width>551</width>
+     <height>71</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>TextLabel</string>
+   </property>
+  </widget>
+  <widget class="QTableWidget" name="tableWidget">
+   <property name="geometry">
+    <rect>
+     <x>20</x>
+     <y>270</y>
+     <width>811</width>
+     <height>241</height>
+    </rect>
+   </property>
+   <column>
+    <property name="text">
+     <string>UID</string>
+    </property>
+   </column>
+   <column>
+    <property name="text">
+     <string>이름</string>
+    </property>
+   </column>
+   <column>
+    <property name="text">
+     <string>생년월일</string>
+    </property>
+   </column>
+   <column>
+    <property name="text">
+     <string>차량 S/N</string>
+    </property>
+   </column>
+   <column>
+    <property name="text">
+     <string>키</string>
+    </property>
+   </column>
+   <column>
+    <property name="text">
+     <string>몸무게</string>
+    </property>
+   </column>
+   <column>
+    <property name="text">
+     <string>전화번호</string>
+    </property>
+   </column>
+   <column>
+    <property name="text">
+     <string>면허번호</string>
+    </property>
+   </column>
+  </widget>
+  <widget class="QPushButton" name="btnConfirm">
+   <property name="geometry">
+    <rect>
+     <x>260</x>
+     <y>230</y>
+     <width>181</width>
+     <height>26</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>확인</string>
+   </property>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
