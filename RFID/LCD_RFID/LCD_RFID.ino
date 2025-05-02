@@ -12,9 +12,9 @@ private:
   bool isCardPresent = false;
   bool wasCardPresent = false;
   unsigned long lastSeen = 0;
+  String UID = "";
 
 public:
-  String UID = "";  // UID 정보를 외부에서 접근 가능하게
 
   RFIDHandler(byte ssPin, byte rstPin) : mfrc(ssPin, rstPin) {}
 
@@ -82,10 +82,4 @@ String lastUID = "";
 void loop() {
   // put your main code here, to run repeatedly:
   rfid.update();
-  if (rfid.UID != lastUID) {
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print(rfid.UID);
-    lastUID = rfid.UID;
-  }
 }
