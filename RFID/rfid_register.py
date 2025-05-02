@@ -9,20 +9,20 @@ import mysql.connector
 
 from_class = uic.loadUiType("rfid_register.ui")[0]
 
-car_db = mysql.connector.connect(
-    host = "localhost",
-    port = 3306,
-    user = "kth",
-    password = "th0708csi!",
-    database = "car_db"
-)
+car_db_config = {
+    "host": "localhost",
+    "port": 3306,
+    "user": "kth",
+    "password": "th0708csi!",
+    "database": "car_db"
+}
 
 # 실행 전 아두이노 포트 확인할 것!(/dev/ttyACM0 or /dev/ttyACM1 or /dev/ttyUSB0)
 
 class SerialReader(QThread):
     data_received = pyqtSignal(str, bool)
 
-    def __init__(self, port='/dev/ttyACM1', baudrate=9600):
+    def __init__(self, port='/dev/ttyACM0', baudrate=9600):
         super().__init__()
         self.port = port
         self.baudrate = baudrate
@@ -57,8 +57,8 @@ class WindowClass(QMainWindow, from_class):
         self.tableWidget.horizontalHeader().setSectionResizeMode(
             QHeaderView.ResizeMode.Stretch)
 
-        self.db_conn = car_db
-        self.reader = SerialReader(port='/dev/ttyACM1', baudrate=9600)
+        self.car_db = mysql.connector.connect(**car_db_config)
+        self.reader = SerialReader(port='/dev/ttyACM0', baudrate=9600)
         self.reader.data_received.connect(self.update_data)
         self.reader.start()
 
@@ -99,7 +99,7 @@ class WindowClass(QMainWindow, from_class):
             self.labelStatus.setText("저장할 데이터가 없습니다!")
             return
             
-        cursor = self.db_conn.cursor(buffered=True)
+        cursor = self.car_db.cursor(buffered=True)
         success_count = 0
         error_count = 0
         
@@ -154,7 +154,7 @@ class WindowClass(QMainWindow, from_class):
                     self.labelStatus.setText(f"데이터 처리 오류: {str(e)}")
                     continue
             
-            self.db_conn.commit()
+            self.car_db.commit()
             
             # 결과 메시지 표시
             if success_count > 0:
@@ -169,7 +169,7 @@ class WindowClass(QMainWindow, from_class):
             
         except mysql.connector.Error as err:
             self.labelStatus.setText(f"데이터베이스 오류: {err}")
-            self.db_conn.rollback()
+            self.car_db.rollback()
             
         finally:
             cursor.close()
