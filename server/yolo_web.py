@@ -1,4 +1,4 @@
-from flask import Flask, Response, render_template_string
+from flask import Flask, Response, render_template_string, request, jsonify
 import cv2
 import time
 from ultralytics import YOLO
@@ -6,17 +6,18 @@ import torch
 import requests
 import threading
 import numpy as np
+import pymysql
 
 # --- Configuration ---
-YOLO_MODEL_PATH = "yolov8s.pt"
+YOLO_MODEL_PATH = "yolov8n.pt"
 TARGET_CLASS_PERSON = "person" # Renamed for clarity
 TARGET_CLASS_TRAFFIC_LIGHT = "traffic light"
 CONFIDENCE_THRESHOLD = 0.5
-REQUEST_TIMEOUT = 1.0
+REQUEST_TIMEOUT = 3.0
 
 # ESP32 Communication URLs
-ESP32_CAM_STREAM_URL = "http://192.168.0.187:81/stream" # variable
-ESP32_CONTROL_URL = "http://192.168.0.187:81/control"
+ESP32_CAM_STREAM_URL = "http://192.168.0.20:81/stream" # variable
+ESP32_CONTROL_URL = "http://192.168.0.20:81/control"
 
 # --- Signals ---
 # Define distinct signals for different states (adjust characters as needed)
@@ -28,11 +29,11 @@ NO_PERSON_NO_LIGHT_SIGNAL = "N" # Default state (no person, no significant light
 
 # --- HSV Color Ranges ---
 RED_RANGES = [
-    {'lower': np.array([0, 100, 100]), 'upper': np.array([10, 255, 255])},
-    {'lower': np.array([160, 100, 50]), 'upper': np.array([179, 255, 255])}
+    {"lower": np.array([0, 100, 100]), "upper": np.array([10, 255, 255])},
+    {"lower": np.array([160, 100, 50]), "upper": np.array([179, 255, 255])}
 ]
-GREEN_RANGE = {'lower': np.array([40, 50, 50]), 'upper': np.array([85, 255, 255])}
-ORANGE_RANGE = {'lower': np.array([10, 100, 100]), 'upper': np.array([25, 255, 255])}
+GREEN_RANGE = {"lower": np.array([40, 50, 50]), "upper": np.array([85, 255, 255])}
+ORANGE_RANGE = {"lower": np.array([10, 100, 100]), "upper": np.array([25, 255, 255])}
 MIN_PIXEL_PERCENT_THRESHOLD = 0.05 # 5% of ROI area needed to confirm color
 
 # --- Drawing Colors (BGR) ---
@@ -74,9 +75,8 @@ else:
 
 # --- Global State for Command Sending ---
 last_command_sent = None
-# lock is like a token, only one thread can modify data
 command_lock = threading.Lock()
-# to keep http connection alive (reuse) instead of creating new in a row
+# Use a requests session for potential connection reuse
 http_session = requests.Session()
 
 def send_command_thread(cmd):
@@ -84,7 +84,6 @@ def send_command_thread(cmd):
     global last_command_sent
 
     try:
-        # ex) http://<ESP_IP>:81/control?cmd=P
         params = {"cmd": cmd}
         # Use the session object
         res = http_session.get(ESP32_CONTROL_URL, params=params, timeout=REQUEST_TIMEOUT)
@@ -100,11 +99,11 @@ def send_command_thread(cmd):
     except requests.exceptions.RequestException as e:
         print(f"ERROR: Error sending command '{cmd}' to {ESP32_CONTROL_URL}: {e}")
         with command_lock:
-            last_command_sent = None
+            last_command_sent = None # Allow retry
     except Exception as e:
         print(f"ERROR: An unexpected error occurred in send_command_thread: {e}")
         with command_lock:
-            last_command_sent = None
+            last_command_sent = None # Allow retry
 
 
 def detect_traffic_light_color(roi):
@@ -149,7 +148,7 @@ def detect_traffic_light_color(roi):
 
 
 # --- Add near the top Configuration section ---
-FRAME_SKIP = 3 # Process only every 3rd frame (Adjust this value!)
+FRAME_SKIP = 10 # Process only every 3rd frame (Adjust this value!)
 
 # ... other code ...
 
@@ -172,13 +171,13 @@ def generate_frames():
     while True:
         if not camera.isOpened():
             print("ERROR: Camera is not open in generate_frames loop. Retrying...")
-            time.sleep(max(REQUEST_TIMEOUT, 1.0))
+            time.sleep(5.0)
             continue
 
         success, frame = camera.read()
         if not success or frame is None:
             print("WARNING: Failed to grab frame. Retrying...")
-            time.sleep(0.1)
+            time.sleep(0.5)
             continue
 
         frame_count += 1
@@ -215,12 +214,9 @@ def generate_frames():
                                 elif class_name.lower() == TARGET_CLASS_TRAFFIC_LIGHT.lower():
                                     roi = frame[y1:y2, x1:x2]
                                     light_color, draw_color = detect_traffic_light_color(roi)
-                                    if light_color == "RED": 
-                                        red_light_detected = True
-                                    elif light_color == "GREEN": 
-                                        green_light_detected = True
-                                    elif light_color == "ORANGE": 
-                                        orange_light_detected = True
+                                    if light_color == "RED": red_light_detected = True
+                                    elif light_color == "GREEN": green_light_detected = True
+                                    elif light_color == "ORANGE": orange_light_detected = True
                                     label = f"Light: {light_color} ({conf:.2f})"
                                     detected_items_for_drawing.append({
                                         "box": (x1, y1, x2, y2), "label": label, "color": draw_color
@@ -347,6 +343,7 @@ def index():
         )
     return render_template_string(html_content)
 
+
 @app.route("/video_feed")
 def video_feed():
     """Route that streams video frames."""
@@ -361,22 +358,63 @@ def video_feed():
     return Response(generate_frames(),
                     mimetype="multipart/x-mixed-replace; boundary=frame")
 
+def get_db_connection():
+    db = pymysql.connect(
+        host="localhost",
+        user="root",
+        password="kim4582345",
+        database="johnbase",
+        charset="utf8mb4"
+    )
+
+
+@app.route("/sensor", methods=["POST"])
+def receive_sensor_data():
+    try:
+        data = request.get_json()
+        if not data:
+            return "Invalid JSON", 400
+
+        sensor = data.get("sensor")
+        time = data.get("time")
+        value = data.get("data")
+
+        if not all([sensor, time, value]):
+            return "Missing data", 400
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        sql = "INSERT INTO test (sensor, realtime, data) VALUES (%s, %s, %s)"
+        cursor.execute(sql, (sensor, time, value))
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return "Data stored successfully", 200
+
+    except Exception as e:
+        return f"Error: {str(e)}", 500
+
+
+
 def cleanup():
     """Release resources."""
     print("\nShutting down... Releasing resources.")
     if camera and camera.isOpened():
         camera.release()
         print("INFO: Camera released.")
+
     # Close the requests session
-    http_session.close()
-    print("INFO: HTTP session closed.")
+    if http_session:
+        http_session.close()
+        print("INFO: HTTP session closed.")
+
     cv2.destroyAllWindows()
     print("INFO: Cleanup finished.")
 
+
 if __name__ == "__main__":
     print("INFO: Starting Flask server...")
-    # Corrected HTML entity: &lt; becomes <
-    print(f"INFO: Access the stream at http://127.0.0.1:5000/ or http://<your-ip-address>:5000/")
     print(f"INFO: Using ESP32 Stream: {ESP32_CAM_STREAM_URL}")
     print(f"INFO: Sending commands to ESP32 Control: {ESP32_CONTROL_URL}")
     try:
