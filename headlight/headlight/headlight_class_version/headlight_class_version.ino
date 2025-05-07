@@ -16,7 +16,7 @@ class AmbientLightManager
     unsigned long pre_light_measuretime = 0;
     unsigned long light_measuretime_interval = 50;
 
-    const int LIGHT_THRESHOLD = 21;
+    const int LIGHT_THRESHOLD = 75;
 
   public:
     void begin() 
