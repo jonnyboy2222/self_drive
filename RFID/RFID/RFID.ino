@@ -1,6 +1,7 @@
 #include <SPI.h>
 #include <MFRC522.h>
 
+#define BAUD_RATE 9600
 #define RFID_RST_PIN 9
 #define RFID_SS_PIN 10
 #define RFID_DEBOUNCE_TIME 500
@@ -79,7 +80,7 @@ RFIDManager rfid(RFID_SS_PIN, RFID_RST_PIN);
 
 void setup() {
   // put your setup code here, to run once:
-  Serial.begin(9600);
+  Serial.begin(BAUD_RATE);
   SPI.begin();
   rfid.begin();
   Serial.println("RFID initialized");
