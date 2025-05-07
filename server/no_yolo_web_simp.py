@@ -5,6 +5,7 @@ import threading
 import pymysql
 from dbutils.pooled_db import PooledDB
 import json
+from datetime import datetime
 
 # --- Configuration ---
 REQUEST_TIMEOUT = 3.0
@@ -33,9 +34,9 @@ try:
         maxconnections=5,  # Max number of connections in the pool
         mincached=2,     # Min number of idle connections to keep in cache
         host="localhost",
-        user="root",
-        password="kim4582345",
-        database="johnbase",
+        user="", #원하는 유저명으로 변경 바람
+        password="", #원하는 비밀번호로 변경 바람
+        database="", #원하는 DB명으로 변경 바람
         charset="utf8mb4",
         autocommit=True # Optional: set autocommit for connections from the pool
     )
@@ -121,26 +122,31 @@ def receive_sensor_data():
         if not data:
             return "Invalid JSON", 400
 
-        sensor = data.get("sensor")
-        time = data.get("time")
-        value = data.get("data")
+        rfid_uid = data.get("rfid_uid")
+        shock = data.get("shock")
+        temperature = data.get("temperature")
+        #time = data.get("time")
+        #value = data.get("data")
 
-        if not all([sensor, time, value is not None]): # Check for presence of all three
+        if not all([rfid_uid, shock, temperature is not None]): # Check for presence of all three
             return "Missing data", 400
 
         # If 'value' is a list (like from GPS data), convert it to a JSON string
         # to store in a single database column.
+        '''
         if isinstance(value, list):
             value_to_store = json.dumps(value)
         else:
             value_to_store = value
+        '''
 
 
         # Use context managers for connection and cursor
         with get_db_connection() as conn:
             with conn.cursor() as cursor:
-                sql = "INSERT INTO test (sensor, realtime, data) VALUES (%s, %s, %s)"
-                cursor.execute(sql, (sensor, time, value_to_store))
+                time_stamp = datetime.now()
+                sql = "INSERT INTO sensor_data (uid, shock, temperature, timestamp) VALUES (%s, %s, %s)"
+                cursor.execute(sql, (rfid_uid, int(shock), int(temperature), time_stamp))
         
         # Connection and cursor are automatically closed/returned to pool here   
 
@@ -165,11 +171,11 @@ def rfid_check():
         if not data:
             return jsonify({"status": "error", "message": "Invalid JSON"}), 400
 
-        rfid_tag = data.get("rfid_tag")
-        if not rfid_tag:
+        rfid_uid = data.get("rfid_tag")
+        if not rfid_uid:
             return jsonify({"status": "error", "message": "Missing 'rfid_tag' in JSON"}), 400
 
-        print(f"INFO: Received RFID check request for tag: {rfid_tag}")
+        print(f"INFO: Received RFID check request for tag: {rfid_uid}")
 
         
         rfid_verified = False
@@ -177,19 +183,19 @@ def rfid_check():
         with get_db_connection() as conn:
             with conn.cursor() as cursor:
                 # Ensure you have a table like 'authorized_rfids' with a 'tag_id' column
-                sql = "SELECT COUNT(*) FROM authorized_rfids WHERE tag_id = %s"
-                cursor.execute(sql, (rfid_tag,))
+                sql = "SELECT COUNT(*) FROM user WHERE uid = %s"
+                cursor.execute(sql, (rfid_uid,))
                 result = cursor.fetchone()
                 if result and result[0] > 0:
                     rfid_verified = True
         # Connection and cursor are automatically closed/returned to pool here
 
         if rfid_verified:
-            print(f"INFO: RFID tag '{rfid_tag}' VERIFIED. Sending PASS signal.")
+            print(f"INFO: RFID UID '{rfid_uid}' VERIFIED. Sending PASS signal.")
             threading.Thread(target=send_command_thread, args=(RFID_PASS_SIGNAL,), daemon=True).start()
             return jsonify({"status": "success", "message": "RFID verified", "result": "pass"}), 200
         else:
-            print(f"INFO: RFID tag '{rfid_tag}' NOT VERIFIED. Sending FAIL signal.")
+            print(f"INFO: RFID UID '{rfid_uid}' NOT VERIFIED. Sending FAIL signal.")
             threading.Thread(target=send_command_thread, args=(RFID_FAIL_SIGNAL,), daemon=True).start()
             return jsonify({"status": "success", "message": "RFID not verified", "result": "fail"}), 200
 
