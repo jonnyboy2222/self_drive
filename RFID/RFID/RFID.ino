@@ -5,7 +5,8 @@
 #define RFID_SS_PIN 10
 #define RFID_DEBOUNCE_TIME 500
 
-class RFIDHandler {
+// === RFID Manager ===
+class RFIDManager {
 private:
   MFRC522 mfrc;
   bool isCardPresent = false;
@@ -15,7 +16,7 @@ private:
 
 public:
   
-  RFIDHandler(byte ssPin, byte rstPin) : mfrc(ssPin, rstPin) {}
+  RFIDManager(byte ssPin, byte rstPin) : mfrc(ssPin, rstPin) {}
 
   void begin() {
     mfrc.PCD_Init();
@@ -74,7 +75,7 @@ public:
   }
 };
 
-RFIDHandler rfid(RFID_SS_PIN, RFID_RST_PIN);
+RFIDManager rfid(RFID_SS_PIN, RFID_RST_PIN);
 
 void setup() {
   // put your setup code here, to run once:
