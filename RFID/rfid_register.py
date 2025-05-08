@@ -13,7 +13,7 @@ car_db_config = {
     "host": "localhost",
     "port": 3306,
     "user": "kth",
-    "password": "********",
+    "password": "*********",
     "database": "car_db"
 }
 
@@ -95,7 +95,10 @@ class WindowClass(QMainWindow, from_class):
 
     def register_data(self):
         if self.tableWidget.rowCount() == 0:
-            self.labelStatus.setText("저장할 데이터가 없습니다!")
+            self.labelStatus.setText("")
+            QMessageBox.warning(
+                    self, "등록 오류", "저장할 데이터가 없습니다!")
+            #self.labelStatus.setText("저장할 데이터가 없습니다!")
             return
             
         cursor = self.car_db.cursor(buffered=True)
