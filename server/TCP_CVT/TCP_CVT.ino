@@ -9,7 +9,7 @@
 const char *ssid = "addinedu_class_1(2.4G)";
 const char *password = "addinedu1";
 
-IPAddress staticIP(192, 168, 2, 255); // Should be outside the DHCP range (pick 20 <= num or 200 <= num)
+IPAddress staticIP(192, 168, 2, 245); // Should be outside the DHCP range (pick 20 <= num or 200 <= num)
 IPAddress gateway(192, 168, 2, 1);    // Router's IP (Gateway)
 IPAddress subnet(255, 255, 255, 0);   // Standard subnet mask
 
@@ -94,8 +94,17 @@ void sendRfidDataViaTCP(String rfidTagJson) {
             vTaskDelay(10 / portTICK_PERIOD_MS);
         }
 
-        String verificationResponse = client.readStringUntil('\n');
-        verificationResponse.trim(); // Remove any trailing whitespace
+        char buffer[16]; // Make sure buffer is large enough for "FAIL\0" or "PASS\0"
+        int bytesRead = client.readBytesUntil('\n', buffer, sizeof(buffer) - 1);
+        String verificationResponse = ""; // Initialize
+
+        if (bytesRead > 0) {
+            buffer[bytesRead] = '\0'; // Null-terminate the C-string
+            verificationResponse = String(buffer); // Convert C-string to Arduino String
+        }
+        verificationResponse.trim();
+
+
         // Serial.print("TCP: RFID Verification Response from Python: '");
         // Serial.print(verificationResponse);
         // Serial.println("'");
@@ -180,8 +189,8 @@ void networkSendTask(void *parameter) {
     // Serial.println("Network Send Task started on Core " + String(xPortGetCoreID()));
     // Fixed-size buffer to receive data from the queue
     char dataToPost[SENSOR_DATA_QUEUE_ITEM_SIZE];
-    const int MAX_HTTP_RETRIES = 3;
-    const int HTTP_RETRY_DELAY_MS = 2000;
+    const int MAX_TCP_SEND_RETRIES = 3; // Renamed for clarity
+    const int TCP_RETRY_DELAY_MS = 2000;   // Renamed for clarity
 
     while (true) {
         // Wait indefinitely until an item is available in the queue. (portMAX_DELAY)
@@ -195,7 +204,7 @@ void networkSendTask(void *parameter) {
                 WiFiClient client;
                 bool sendSuccess = false;
 
-                for (int attempt = 0; attempt < MAX_HTTP_RETRIES; attempt++) {
+                for (int attempt = 0; attempt < MAX_TCP_SEND_RETRIES; attempt++) {
                     // Serial.print("Network Task: Attempting TCP send (try ");
                     // Serial.print(attempt + 1);
                     
@@ -205,8 +214,8 @@ void networkSendTask(void *parameter) {
 
                     if (!client.connect(python_server_ip, python_server_port)) {
                         // Serial.println("Network Task: TCP connection failed on attempt " + String(attempt + 1));
-                        if (attempt < MAX_HTTP_RETRIES - 1) {
-                            vTaskDelay(HTTP_RETRY_DELAY_MS / portTICK_PERIOD_MS);
+                        if (attempt < MAX_TCP_SEND_RETRIES - 1) {
+                            vTaskDelay(TCP_RETRY_DELAY_MS / portTICK_PERIOD_MS);
                         }
                         continue; // Try to connect again
                     }
@@ -224,9 +233,9 @@ void networkSendTask(void *parameter) {
                         // Serial.print(attempt + 1);
                         // Serial.println(".");
                         client.stop(); // Close connection before retrying
-                        if (attempt < MAX_HTTP_RETRIES - 1) { // no delay after the last attempt
+                        if (attempt < MAX_TCP_SEND_RETRIES - 1) { // no delay after the last attempt
                             // Serial.println("Network Task: Waiting before retry...");
-                            vTaskDelay(HTTP_RETRY_DELAY_MS / portTICK_PERIOD_MS);
+                            vTaskDelay(TCP_RETRY_DELAY_MS / portTICK_PERIOD_MS);
                         }
                     }
                 } // End of retry loop
