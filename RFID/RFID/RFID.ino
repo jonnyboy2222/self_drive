@@ -52,7 +52,7 @@ public:
         mfrc.PICC_HaltA();        // ★ 카드 통신 종료
         mfrc.PCD_StopCrypto1();   // ★ 암호화 종료
       } else {
-        Serial.println("card detected, but UID read failed");
+        Serial.println("card detected, but read failed");
         UID = "";
       }
       wasCardPresent = true;

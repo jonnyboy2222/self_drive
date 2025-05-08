@@ -3,7 +3,7 @@ import time
 import sys
 from PyQt6.QtWidgets import *
 from PyQt6.QtGui import *
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import *
 from PyQt6 import uic
 import mysql.connector
 
@@ -13,11 +13,9 @@ car_db_config = {
     "host": "localhost",
     "port": 3306,
     "user": "kth",
-    "password": "*********",
+    "password": "********",
     "database": "car_db"
 }
-
-# 실행 전 아두이노 포트 확인할 것!(/dev/ttyACM0 or /dev/ttyACM1 or /dev/ttyUSB0)
 
 class SerialReader(QThread):
     data_received = pyqtSignal(str, bool)
@@ -31,7 +29,7 @@ class SerialReader(QThread):
     def run(self):
         try:
             with serial.Serial(self.port, self.baudrate, timeout=1) as ser:
-                time.sleep(2)
+                #time.sleep(2)
                 while self.running:
                     if ser.in_waiting > 0:
                         line = ser.readline().decode('utf-8').strip()
@@ -63,6 +61,7 @@ class WindowClass(QMainWindow, from_class):
         self.reader.start()
 
         self.btnConfirm.clicked.connect(self.confirm_data)
+        self.btnReset.clicked.connect(self.reset)
         self.btnRegister.clicked.connect(self.register_data)
 
     def update_data(self, data, success):
@@ -105,14 +104,29 @@ class WindowClass(QMainWindow, from_class):
         
         try:
             # 모든 행에 대해 반복
-            for row in range(self.tableWidget.rowCount()):
+            for row in range(self.tableWidget.rowCount() - 1, -1, -1):
+                # 모든 필드가 채워져 있는지 확인
+                is_empty = False
+                for col in range(8):  # 8개의 컬럼 확인
+                    item = self.tableWidget.item(row, col)
+                    if not item or not item.text().strip():
+                        is_empty = True
+                        break
+                
+                if is_empty:
+                    QMessageBox.warning(self, "등록 오류", 
+                        f"사용자 정보가 불충분합니다.")
+                    self.tableWidget.removeRow(row)
+                    return
+                
                 uid = self.tableWidget.item(row, 0).text()
                 
                 # 중복 체크
                 check_sql = "SELECT * FROM user WHERE uid = %s"
                 cursor.execute(check_sql, (uid,))
+                existing_user = cursor.fetchone()
                 
-                if cursor.fetchone():
+                if existing_user:
                     error_count += 1
                     continue
                 
@@ -158,21 +172,40 @@ class WindowClass(QMainWindow, from_class):
             
             # 결과 메시지 표시
             if success_count > 0:
-                message = f"{success_count}개의 데이터가 성공적으로 등록되었습니다."
+                message = f"{success_count}개의 데이터 등록 성공"
                 if error_count > 0:
-                    message += f"\n{error_count}개의 데이터는 이미 등록되어 있어 건너뛰었습니다."
-                self.labelStatus.setText(message)
+                    message += f"\n{error_count}개의 데이터가 이미 등록되어 있습니다."
+                QMessageBox.information(self, "등록 결과", message)
+                #self.labelStatus.setText(message)
             else:
-                self.labelStatus.setText("모든 데이터가 이미 등록되어 있습니다!")
+                #self.labelStatus.setText("모든 데이터가 이미 등록되어 있습니다.")
+                QMessageBox.warning(
+                    self, "등록 오류", "모든 데이터가 이미 등록되어 있습니다.")
             
+            self.labelStatus.setText("")
+            # 모든 행 제거
             self.tableWidget.setRowCount(0)
             
+            # 중복된 사용자 정보를 테이블에 표시
+            if existing_user:
+                duplicate_row = self.tableWidget.rowCount()
+                self.tableWidget.insertRow(duplicate_row)
+                        
+                # 기존 데이터를 빨간색으로 표시
+                for col, value in enumerate(existing_user):
+                    item = QTableWidgetItem(str(value))
+                    item.setForeground(QColor('red'))
+                    self.tableWidget.setItem(duplicate_row, col, item)
+            
         except mysql.connector.Error as err:
-            self.labelStatus.setText(f"데이터베이스 오류: {err}")
+            self.labelStatus.setText(f"등록 오류: {err}")
             self.car_db.rollback()
             
         finally:
             cursor.close()
+
+    def reset(self):
+        self.tableWidget.setRowCount(0)
 
     def closeEvent(self, event):
         self.reader.stop()
