@@ -36,8 +36,6 @@ enum DriveState {
   ACCESS_DENIED
 };
 
-DriveState currentState = WAIT_FOR_AUTH;
-bool isReversing = false;
 
 // === LCD Manager ===
 class LCDManager {
@@ -255,6 +253,7 @@ private:
   LCDManager &lcd;
   AlcoholManager &alcohol;
   DriveManager &drive;
+  DriveState currentState = WAIT_FOR_AUTH;
 public:
   SystemManager(LCDManager &l, AlcoholManager &a, DriveManager &d)
     : lcd(l), alcohol(a), drive(d) {}

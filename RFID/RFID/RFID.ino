@@ -76,18 +76,18 @@ public:
   }
 };
 
-RFIDManager rfid(RFID_SS_PIN, RFID_RST_PIN);
+RFIDManager rfidManager(RFID_SS_PIN, RFID_RST_PIN);
 
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(BAUD_RATE);
   SPI.begin();
-  rfid.begin();
+  rfidManager.begin();
   Serial.println("RFID initialized");
 
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
-  rfid.update();
+  rfidManager.update();
 }
