@@ -3,6 +3,7 @@
 #include <ArduinoJson.h>
 #include <LiquidCrystal.h>
 #include <SoftwareSerial.h>
+#include <Servo.h>
 
 #define BAUD_RATE 9600
 #define ESP_BAUD_RATE 9600
@@ -10,23 +11,33 @@
 #define LCD_RS_PIN 2
 #define LCD_EN_PIN 3
 #define LCD_D4_PIN 4
-#define LCD_D5_PIN 5
-#define LCD_D6_PIN 6
-#define LCD_D7_PIN 7
+#define LCD_D5_PIN #
+#define LCD_D6_PIN #
+#define LCD_D7_PIN #
 
 #define RFID_RST_PIN 9
 #define RFID_SS_PIN 10
 #define RFID_DEBOUNCE_TIME 500
+
+#define BT_RXD 2
+#define BT_TXD 3
+SoftwareSerial bluetooth(BT_RXD, BT_TXD);
 
 #define ESP_RX_PIN A0
 #define ESP_TX_PIN A1
 
 #define ALCOHOL_SENSOR_PIN A2
 
-#define MOTOR_L_IN1 4
-#define MOTOR_L_IN2 5
-#define MOTOR_R_IN1 6
-#define MOTOR_R_IN2 7
+#define MOTOR_L_IN1 12
+#define MOTOR_L_IN2 13
+#define MOTOR_R_IN1 7
+#define MOTOR_R_IN2 8
+#define MOTOR_1_SPEED 5
+#define MOTOR_2_SPEED 6
+#define SERVO 11
+
+Servo steering;
+String input = ""
 
 enum DriveState {
     WAIT_FOR_AUTH,
@@ -185,67 +196,44 @@ class AlcoholManager
 };
 
 // === Drive Motor Manager ===
-class DriveManager
-{
-  private:
-    bool reversingFlag = false;
+class DriveManager {
   public:
-    bool isReversing()
-    {
-      return reversingFlag;
-    }
-    void begin()
-    {
+    void begin() {
       pinMode(MOTOR_L_IN1, OUTPUT);
       pinMode(MOTOR_L_IN2, OUTPUT);
       pinMode(MOTOR_R_IN1, OUTPUT);
       pinMode(MOTOR_R_IN2, OUTPUT);
-      stop();
+      pinMode(MOTOR_1_SPEED, OUTPUT);
+      pinMode(MOTOR_2_SPEED, OUTPUT);
+      steering.attach(SERVO);
+      steering.write(90);
     }
 
-    void forward()
-    {
-      reversingFlag = false;
+    void moveForward(int speed = 150) {
       digitalWrite(MOTOR_L_IN1, HIGH);
       digitalWrite(MOTOR_L_IN2, LOW);
       digitalWrite(MOTOR_R_IN1, HIGH);
       digitalWrite(MOTOR_R_IN2, LOW);
+      analogWrite(MOTOR_1_SPEED, speed);
+      analogWrite(MOTOR_2_SPEED, speed);
     }
 
-    void backward()
-    {
-      reversingFlag = true;
+    void moveBackward(int speed = 150) {
       digitalWrite(MOTOR_L_IN1, LOW);
       digitalWrite(MOTOR_L_IN2, HIGH);
       digitalWrite(MOTOR_R_IN1, LOW);
       digitalWrite(MOTOR_R_IN2, HIGH);
+      analogWrite(MOTOR_1_SPEED, speed);
+      analogWrite(MOTOR_2_SPEED, speed);
     }
 
-    void left()
-    {
-      reversingFlag = false;
-      digitalWrite(MOTOR_L_IN1, LOW);
-      digitalWrite(MOTOR_L_IN2, LOW);
-      digitalWrite(MOTOR_R_IN1, HIGH);
-      digitalWrite(MOTOR_R_IN2, LOW);
-    }
-
-    void right()
-    {
-      reversingFlag = false;
-      digitalWrite(MOTOR_L_IN1, HIGH);
-      digitalWrite(MOTOR_L_IN2, LOW);
-      digitalWrite(MOTOR_R_IN1, LOW);
-      digitalWrite(MOTOR_R_IN2, LOW);
-    }
-
-    void stop()
-    {
-      reversingFlag = false;
+    void stopMotors() {
       digitalWrite(MOTOR_L_IN1, LOW);
       digitalWrite(MOTOR_L_IN2, LOW);
       digitalWrite(MOTOR_R_IN1, LOW);
       digitalWrite(MOTOR_R_IN2, LOW);
+      analogWrite(MOTOR_1_SPEED, 0);
+      analogWrite(MOTOR_2_SPEED, 0);
     }
 };
 
@@ -303,26 +291,40 @@ class SystemManager
       }
     }
 
-    void handleDriveCommand(const String &cmd)
-    {
-      if (currentState != ACCESS_GRANTED)
-      {
-        lcd.printLine(0, "CMD BLOCKED");
-        return;
-      }
+    // void handleDriveCommand(const String &cmd)
+    // {
+    //   if (currentState != ACCESS_GRANTED)
+    //   {
+    //     lcd.printLine(0, "CMD BLOCKED");
+    //     return;
+    //   }
 
-      if (cmd == "전진")
-        drive.forward();
-      else if (cmd == "후진")
-        drive.backward();
-      else if (cmd == "좌회전")
-        drive.left();
-      else if (cmd == "우회전")
-        drive.right();
-      else if (cmd == "정지")
-        drive.stop();
-      else
-        lcd.printLine(1, "BT: UNKNOWN");
+    //   if (cmd == "전진")
+    //     drive.forward();
+    //   else if (cmd == "후진")
+    //     drive.backward();
+    //   else if (cmd == "좌회전")
+    //     drive.left();
+    //   else if (cmd == "우회전")
+    //     drive.right();
+    //   else if (cmd == "정지")
+    //     drive.stop();
+    //   else
+    //     lcd.printLine(1, "BT: UNKNOWN");
+    // }
+
+    void handleDriveCommand(const String &cmd) {
+      if (cmd.startsWith("X")) {
+        int angle = cmd.substring(1).toInt();
+        steering.write(angle);
+      } else if (cmd.length() > 0) {
+        char action = cmd.charAt(0);
+        switch (action) {
+          case 'F': motor.moveForward(); break;
+          case 'B': motor.moveBackward(); break;
+          case 'S': motor.stopMotors(); break;
+        }
+      }
     }
 };
 
@@ -352,10 +354,21 @@ void loop() {
   // put your main code here, to run repeatedly:
   rfidManager.update();
   String espResponse = espManager.getResponse();
-  if(espResponse != "")
-  {
-    systemManager.handleResponse(espResponse);
-  }
+  // if(espResponse != "")
+  // {
+  //   systemManager.handleResponse(espResponse);
+  // }
   systemManager.update();
+
+  while (bluetooth.available()) {
+    char c = bluetooth.read();
+    if (c == '\n') {
+      systemManager.handleCommand(input);
+      input = "";
+    } else {
+      input += c;
+    }
+  }
+  
   
 }
