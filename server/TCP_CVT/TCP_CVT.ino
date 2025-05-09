@@ -81,12 +81,12 @@ void sendRfidDataViaTCP(String rfidTagJson) {
         // Serial.print("Sending RFID check: ");
         // Serial.println(jsonPayload);
 
-        client.println(jsonPayload); // Send the JSON string, println adds \r\n
+        client.print(jsonPayload); // Send the JSON string, println adds \r\n
 
         // Wait for the response from the Python server ("PASS\n" or "FAIL\n")
         unsigned long startTime = millis();
         while (client.available() == 0) {
-            if (millis() - startTime > 5000) { // 5 second timeout
+            if (millis() - startTime > 10000) {
                 // Serial.println("TCP: Timeout waiting for RFID verification response!");
                 client.stop();
                 return;
@@ -99,7 +99,7 @@ void sendRfidDataViaTCP(String rfidTagJson) {
         String verificationResponse = ""; // Initialize
 
         if (bytesRead > 0) {
-            buffer[bytesRead] = '\0'; // Null-terminate the C-string
+            buffer[bytesRead] = '\0'; // Null-terminate
             verificationResponse = String(buffer); // Convert C-string to Arduino String
         }
         verificationResponse.trim();
@@ -112,6 +112,7 @@ void sendRfidDataViaTCP(String rfidTagJson) {
         // Forward the PASS/FAIL signal to Arduino via Serial1
         if (verificationResponse.length() > 0) {
             Serial1.println(verificationResponse);
+            Serial1.flush();
             // Serial.println("TCP: Forwarded verification response to Arduino: '" + verificationResponse + "'");
         } 
         else {
@@ -136,6 +137,7 @@ void uartReceiveTask(void *parameter) {
 
     while (true) {
         if (Serial1.available()) {
+            memset(receivedData, 0, sizeof(receivedData));
             // Read the incoming data line (until newline or buffer full)
             size_t len = Serial1.readBytesUntil('\n', receivedData, SENSOR_DATA_MAX_LEN - 1);
 
@@ -150,12 +152,13 @@ void uartReceiveTask(void *parameter) {
                     DeserializationError error = deserializeJson(doc, sensorDataStr);
 
                     if (!error) {
-                        if (doc.containsKey("rfid_uid")) {
+                        if (doc.containsKey("rfid_uid")) { // should compare purpose
                             // Serial.println("UART Received RFID data: " + sensorDataStr);
                             sendRfidDataViaTCP(sensorDataStr); // Pass the original JSON string    
                         }
                         else {
                             if (sensorDataStr.length() < SENSOR_DATA_QUEUE_ITEM_SIZE) {
+                                memset(dataToSend, 0, sizeof(dataToSend));
                                 // Serial.println("UART Received other sensor data: " + sensorDataStr);
                                 // --- Queue the data for the Network Task ---
                                 strncpy(dataToSend, sensorDataStr.c_str(), SENSOR_DATA_QUEUE_ITEM_SIZE - 1);
@@ -189,75 +192,51 @@ void networkSendTask(void *parameter) {
     // Serial.println("Network Send Task started on Core " + String(xPortGetCoreID()));
     // Fixed-size buffer to receive data from the queue
     char dataToPost[SENSOR_DATA_QUEUE_ITEM_SIZE];
-    const int MAX_TCP_SEND_RETRIES = 3; // Renamed for clarity
-    const int TCP_RETRY_DELAY_MS = 2000;   // Renamed for clarity
+    const int TCP_RECONNECT_DELAY_MS = 3000; // 재연결 시도 간격
+
+    WiFiClient client;
 
     while (true) {
+        // 연결이 끊겼다면 재연결 시도
+        while (!client.connected()) {
+            if (WiFi.status() == WL_CONNECTED) {
+                if (client.connect(python_server_ip, python_server_port)) {
+                    // Serial.println("Network Task: TCP connection established.");
+                } else {
+                    // Serial.println("Network Task: TCP connection failed. Retrying...");
+                    vTaskDelay(TCP_RECONNECT_DELAY_MS / portTICK_PERIOD_MS);
+                }
+            } else {
+                // Serial.println("Network Task Warn: WiFi disconnected. Waiting to reconnect...");
+                vTaskDelay(TCP_RECONNECT_DELAY_MS / portTICK_PERIOD_MS);
+            }
+        }
+
+        memset(dataToPost, 0, sizeof(dataToPost));
         // Wait indefinitely until an item is available in the queue. (portMAX_DELAY)
         // The queue item (data) will be copied into the dataToPost buffer.
         if (xQueueReceive(sensorDataQueue, dataToPost, portMAX_DELAY) == pdPASS) {
-
             // Serial.println("Network Task: Dequeued data for sending: " + String(dataToPost));
 
-            // Check WiFi connection before attempting POST
-            if (WiFi.status() == WL_CONNECTED) {
-                WiFiClient client;
-                bool sendSuccess = false;
-
-                for (int attempt = 0; attempt < MAX_TCP_SEND_RETRIES; attempt++) {
-                    // Serial.print("Network Task: Attempting TCP send (try ");
-                    // Serial.print(attempt + 1);
-                    
-
-                    // Serial.print(" of " + String(MAX_HTTP_RETRIES) + ") to ");
-                    // Serial.print(python_server_ip); Serial.print(":"); Serial.println(python_server_port);
-
-                    if (!client.connect(python_server_ip, python_server_port)) {
-                        // Serial.println("Network Task: TCP connection failed on attempt " + String(attempt + 1));
-                        if (attempt < MAX_TCP_SEND_RETRIES - 1) {
-                            vTaskDelay(TCP_RETRY_DELAY_MS / portTICK_PERIOD_MS);
-                        }
-                        continue; // Try to connect again
-                    }
-
-                    // Serial.println("Network Task: Connected. Sending data: " + String(dataToPost));
-                    if (client.println(String(dataToPost))) { // println adds \r\n
-                        // Serial.print("Network Task: TCP send successful on attempt ");
-                        // Serial.print(attempt + 1);
-                        // Serial.println(".");
-                        sendSuccess = true;
-                        client.stop(); // Close connection
-                        break;      // Exit retry loop on success
-                    } else {
-                        // Serial.print("Network Task: TCP send failed on attempt ");
-                        // Serial.print(attempt + 1);
-                        // Serial.println(".");
-                        client.stop(); // Close connection before retrying
-                        if (attempt < MAX_TCP_SEND_RETRIES - 1) { // no delay after the last attempt
-                            // Serial.println("Network Task: Waiting before retry...");
-                            vTaskDelay(TCP_RETRY_DELAY_MS / portTICK_PERIOD_MS);
-                        }
-                    }
-                } // End of retry loop
-
-                if (!sendSuccess) {
-                    // Serial.println("Network Task: All POST retries failed. Discarding data: " + String(dataToPost));
+            if (client.connected()) {
+                if (client.println(dataToPost)) { // println adds \r\n
+                    // Serial.println("Network Task: TCP send successful.");
+                } else {
+                    // Serial.println("Network Task: TCP send failed. Closing connection...");
+                    client.stop(); // Close connection on failure to send
+                    vTaskDelay(TCP_RECONNECT_DELAY_MS / portTICK_PERIOD_MS);
                 }
             } else {
-                // Serial.println("Network Task Warn: WiFi disconnected. Cannot send sensor data.");
-                // Data is lost if WiFi is down when dequeued.
-                // Could implement re-queuing or saving to SPIFFS/SD if needed.
-                // Add a delay if WiFi is down to prevent rapid queue processing and log spam
-                vTaskDelay(5000 / portTICK_PERIOD_MS); // Wait 5 seconds before checking queue again
+                // Serial.println("Network Task: Connection lost before sending. Reconnecting...");
+                client.stop(); // Ensure clean state for next loop
             }
-             // --- No need to free memory here! ---
-             // The dataToPost buffer is on the stack and managed automatically.
-
         }
+
         // No vTaskDelay needed here because xQueueReceive blocks the task
         // until data is available, effectively yielding the CPU.
     }
 }
+
 
 // =========================================================================
 // SETUP FUNCTION

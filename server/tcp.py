@@ -3,7 +3,6 @@ import threading
 import json
 import pymysql
 from dbutils.pooled_db import PooledDB
-from datetime import datetime
 
 # --- Database Connection Pool ---
 db_pool = PooledDB(
@@ -31,9 +30,10 @@ def handle_client(conn, addr):
                 break
 
             try:
+                print(f"[DEBUG] Received data: {data.decode()}")
                 message = json.loads(data.decode())
             except json.JSONDecodeError:
-                print("[ERROR] Invalid JSON received.")
+                print(f"[ERROR] Invalid JSON received: {data.decode()}")
                 continue
 
             purpose = message.get("purpose")
@@ -45,7 +45,7 @@ def handle_client(conn, addr):
 
                 with get_db_connection() as conn_db:
                     with conn_db.cursor() as cursor:
-                        sql = "SELECT COUNT(*) FROM user WHERE uid = %s"
+                        sql = "SELECT COUNT(*) FROM authorized_rfids WHERE uid = %s"
                         cursor.execute(sql, (rfid_uid,))
                         result = cursor.fetchone()
                         if result and result[0] > 0:
@@ -59,15 +59,14 @@ def handle_client(conn, addr):
                 rfid_uid = message.get("rfid_uid")
                 shock = message.get("shock")
                 temp = message.get("temperature")
-                current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
                 # stores data to db
                 # value_to_store = json.dumps(value) if isinstance(value, list) else value
                 with get_db_connection() as conn_db:
                     with conn_db.cursor() as cursor:
-                        sql = "INSERT INTO sensor_data (uid, shock, temperature, timestamp) VALUES (%s, %s, %s, %s)"
-                        cursor.execute(sql, (rfid_uid, shock, temp, current_time))
-                print(f"[INFO] Sensor data successfully stored in DB with timestamp: {current_time}")
+                        sql = "INSERT INTO test (uid, shock, temperature) VALUES (%s, %s, %s)"
+                        cursor.execute(sql, (rfid_uid, shock, temp))
+                print(f"[INFO] Sensor data successfully stored in DB.")
 
     except Exception as e:
         print(f"[ERROR] Unexpected error: {e}")
@@ -78,10 +77,17 @@ def handle_client(conn, addr):
 HOST = "0.0.0.0"
 PORT = 12345
 
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
+server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+try:
     server_socket.bind((HOST, PORT))
     server_socket.listen()
     print(f"[INFO] TCP Server listening on {HOST}:{PORT}")
     while True:
         conn, addr = server_socket.accept()
         threading.Thread(target=handle_client, args=(conn, addr), daemon=True).start()
+
+except KeyboardInterrupt:
+    print("[INFO] Server interrupted by user (Ctrl+C).")
+finally:
+    server_socket.close()  # Ensure socket is properly closed when the server is interrupted
+    print("[INFO] Server socket closed. Port released.")
