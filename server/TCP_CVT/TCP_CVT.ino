@@ -150,7 +150,7 @@ void uartReceiveTask(void *parameter) {
                     DeserializationError error = deserializeJson(doc, sensorDataStr);
 
                     if (!error) {
-                        if (doc.containsKey("rfid_tag")) {
+                        if (doc.containsKey("rfid_uid")) {
                             // Serial.println("UART Received RFID data: " + sensorDataStr);
                             sendRfidDataViaTCP(sensorDataStr); // Pass the original JSON string    
                         }

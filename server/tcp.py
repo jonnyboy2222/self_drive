@@ -3,6 +3,7 @@ import threading
 import json
 import pymysql
 from dbutils.pooled_db import PooledDB
+from datetime import datetime
 
 # --- Database Connection Pool ---
 db_pool = PooledDB(
@@ -44,7 +45,7 @@ def handle_client(conn, addr):
 
                 with get_db_connection() as conn_db:
                     with conn_db.cursor() as cursor:
-                        sql = "SELECT COUNT(*) FROM authorized_rfids WHERE uid = %s"
+                        sql = "SELECT COUNT(*) FROM user WHERE uid = %s"
                         cursor.execute(sql, (rfid_uid,))
                         result = cursor.fetchone()
                         if result and result[0] > 0:
@@ -58,14 +59,15 @@ def handle_client(conn, addr):
                 rfid_uid = message.get("rfid_uid")
                 shock = message.get("shock")
                 temp = message.get("temperature")
+                current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
                 # stores data to db
                 # value_to_store = json.dumps(value) if isinstance(value, list) else value
                 with get_db_connection() as conn_db:
                     with conn_db.cursor() as cursor:
-                        sql = "INSERT INTO test (uid, shock, temperature) VALUES (%s, %s, %s)"
-                        cursor.execute(sql, (rfid_uid, shock, temp))
-                print(f"[INFO] Sensor data successfully stored in DB.")
+                        sql = "INSERT INTO sensor_data (uid, shock, temperature, timestamp) VALUES (%s, %s, %s, %s)"
+                        cursor.execute(sql, (rfid_uid, shock, temp, current_time))
+                print(f"[INFO] Sensor data successfully stored in DB with timestamp: {current_time}")
 
     except Exception as e:
         print(f"[ERROR] Unexpected error: {e}")
