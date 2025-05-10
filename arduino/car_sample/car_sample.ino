@@ -30,7 +30,7 @@ SoftwareSerial btSerial(BT_RXD, BT_TXD);    // Bluetooth
 #define SERVO 9
 
 Servo steering;
-String input = ""
+String input = "";
 
 // 센서
 
@@ -328,7 +328,7 @@ public:
   }
 };
 
-// GPS
+// GPS // should be moved to esp32-cam
 class GPSWiFiSender {
 private:
     const char* ssid;
@@ -426,6 +426,9 @@ public:
   }
 };
 
+enum DriveState { WAIT_FOR_AUTH, MEASURING, ACCESS_GRANTED, ACCESS_DENIED };
+DriveState currentState = WAIT_FOR_AUTH;
+
 // === System Manager ===
 class SystemManager {
 private:
@@ -471,9 +474,9 @@ public:
     } else if (cmd.length() > 0) {
       char action = cmd.charAt(0);
       switch (action) {
-        case 'F': motor.moveForward(); break;
-        case 'B': motor.moveBackward(); break;
-        case 'S': motor.stopMotors(); break;
+        case 'F': drive.moveForward(); break;
+        case 'B': drive.moveBackward(); break;
+        case 'S': drive.stopMotors(); break;
       }
     }
   }
@@ -483,7 +486,7 @@ public:
 LCDManager lcdManager(LCD_RS_PIN,LCD_EN_PIN,LCD_D4_PIN,LCD_D5_PIN,LCD_D6_PIN,LCD_D7_PIN);
 AlcoholManager alcoholManager;
 DriveManager driveManager;
-RFIDManager rfidManager(RFID_SS_PIN, RFID_RST_PIN);
+RFIDManager rfidManager(RFID_SS_PIN, RFID_RST_PIN, espSerial);
 ESPManager espManager(espSerial);
 BluetoothManager bluetoothManager(btSerial);
 SystemManager systemManager(lcdManager, alcoholManager, driveManager);
@@ -505,8 +508,8 @@ void setup() {
   shockManager.begin();
   tempManager.begin();
   ambientLightManager.begin();
-  lcdManager.printLine(0, "WAITING RFID");
 }
+
 
 void loop() {
   String uid = rfidManager.checkNewUID();
