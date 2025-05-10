@@ -55,6 +55,7 @@ class MotorControl {
 };
 
 // 핀 번호 상수
+const int IN1 = 22;
 const int IN2 = 23;
 const int IN3 = 24;
 const int IN4 = 25;
