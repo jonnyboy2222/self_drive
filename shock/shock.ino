@@ -7,7 +7,7 @@ double per = 0;
 unsigned long prevMillis = millis();
 unsigned long prevMillis2 = millis();
 
-const long delayTime = 50;
+const long delayTime = 200;
 const long delayTime2 = 1000;
 
 

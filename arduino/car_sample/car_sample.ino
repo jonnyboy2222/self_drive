@@ -35,7 +35,6 @@ String input = ""
 // 센서
 
 #define SHOCK_SENSOR_PIN 26
-// #define SHOCK_THRESHOLD  600
 
 #define ULTRASONIC_TRIG  28
 #define ULTRASONIC_ECHO  29
@@ -170,14 +169,58 @@ public:
 
 // === Shock Sensor Manager ===
 class ShockManager {
-public:
-  void begin() { pinMode(SHOCK_SENSOR_PIN, INPUT); }
-  void update() {
-    int value = analogRead(SHOCK_SENSOR_PIN);
-    if (value > SHOCK_THRESHOLD) {
-      espSerial.println("shock:" + String(value));
+  private:
+    uint8_t pin;
+    unsigned long lastWindowTime;
+    const unsigned long windowDuration = 200; // 0.2초
+    int buffer[5];
+    int bufferIndex;
+    int countInWindow;
+    bool lastSensorState;
+
+  public:
+    ShockManager(uint8_t sensorPin) : pin(sensorPin), lastWindowTime(0), bufferIndex(0), countInWindow(0), lastSensorState(LOW) {
+      for (int i = 0; i < 5; i++) buffer[i] = 0;
     }
-  }
+
+    void begin() {
+      pinMode(pin, INPUT);
+      lastWindowTime = millis();
+    }
+
+    void update() {
+      bool currentSensorState = digitalRead(pin);
+
+      // 상승 에지 감지 (LOW -> HIGH)
+      if (currentSensorState == HIGH && lastSensorState == LOW) {
+        countInWindow++;
+      }
+      lastSensorState = currentSensorState;
+
+      unsigned long currentTime = millis();
+      if (currentTime - lastWindowTime >= windowDuration) {
+        buffer[bufferIndex] = countInWindow;
+        bufferIndex = (bufferIndex + 1) % 5;
+
+        // 1초 주기로 평균 계산 및 전송
+        if (bufferIndex == 0) {
+          int sum = 0;
+          for (int i = 0; i < 5; i++) {
+            sum += buffer[i];
+          }
+          float average = sum / 5.0;
+          sendAverage(average);
+        }
+
+        countInWindow = 0;
+        lastWindowTime = currentTime;
+      }
+    }
+
+    void sendAverage(float avg) {
+      Serial.print("Average shocks per 0.2s over 1s: ");
+      Serial.println(avg);
+    }
 };
 
 // === Temperature Manager ===
@@ -285,6 +328,71 @@ public:
   }
 };
 
+// GPS
+class GPSWiFiSender {
+private:
+    const char* ssid;
+    const char* password;
+    const char* serverIP;
+    uint16_t serverPort;
+
+    SoftwareSerial gpsSerial;
+    TinyGPSPlus gps;
+    WiFiClient client;
+
+public:
+    GPSWiFiSender(const char* wifiSSID, const char* wifiPass, const char* serverIp, uint16_t port)
+        : ssid(wifiSSID), password(wifiPass), serverIP(serverIp), serverPort(port), gpsSerial(D5, D6) {} // D5=RX, D6=TX
+
+    void begin() {
+        Serial.begin(115200);
+        gpsSerial.begin(9600);
+
+        WiFi.begin(ssid, password);
+        Serial.print("Connecting to WiFi");
+        while (WiFi.status() != WL_CONNECTED) {
+            delay(500);
+            Serial.print(".");
+        }
+        Serial.println("\nWiFi Connected: " + WiFi.localIP().toString());
+    }
+
+    void updateGPS() {
+        while (gpsSerial.available()) {
+            gps.encode(gpsSerial.read());
+        }
+    }
+
+    bool isLocationValid() {
+        return gps.location.isValid();
+    }
+
+    String getGPSData() {
+        if (gps.location.isUpdated()) {
+            String data = String("LAT:") + gps.location.lat() + ",LON:" + gps.location.lng();
+            return data;
+        }
+        return "";
+    }
+
+    void sendData() {
+        if (!client.connected()) {
+            Serial.println("Connecting to server...");
+            if (!client.connect(serverIP, serverPort)) {
+                Serial.println("Connection failed.");
+                return;
+            }
+            Serial.println("Connected to server.");
+        }
+
+        String data = getGPSData();
+        if (data.length() > 0) {
+            client.println(data);
+            Serial.println("Sent: " + data);
+        }
+    }
+};
+
 // === ESP32 Manager ===
 class ESPManager {
 private:
@@ -380,7 +488,7 @@ ESPManager espManager(espSerial);
 BluetoothManager bluetoothManager(btSerial);
 SystemManager systemManager(lcdManager, alcoholManager, driveManager);
 ObstacleManager obstacleManager;
-ShockManager shockManager;
+ShockManager shockManager(SHOCK_SENSOR_PIN);
 TempManager tempManager;
 AmbientLightManager ambientLightManager;
 
