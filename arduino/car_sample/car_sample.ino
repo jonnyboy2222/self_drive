@@ -30,7 +30,6 @@ SoftwareSerial btSerial(BT_RXD, BT_TXD);    // Bluetooth
 #define SERVO 9
 
 Servo steering;
-String input = "";
 
 // 센서
 
@@ -42,7 +41,6 @@ String input = "";
 #define MIN_DISTANCE_CM  10
 
 #define TEMP_SENSOR_PIN  A0
-#define TEMP_THRESHOLD_C 40
 
 #define ALCOHOL_SENSOR_PIN A1
 #define SWITCH_PIN 36
@@ -57,7 +55,7 @@ String input = "";
 #define LCD_D6_PIN 34
 #define LCD_D7_PIN 35
 
-#define BUZZER_PIN 10
+#define BUZZER_PIN 11
 
 #define LIGHT_SENSOR_PIN 13
 #define LIGHT_THRESHOLD  300
@@ -280,6 +278,7 @@ class ShockManager
     int bufferIndex;
     int countInWindow;
     bool lastSensorState;
+    float latest_average_shock = 0.0;
 
   public:
     ShockManager(uint8_t sensorPin) : pin(sensorPin), lastWindowTime(0), bufferIndex(0), countInWindow(0), lastSensorState(LOW) {
@@ -317,8 +316,9 @@ class ShockManager
           {
             sum += buffer[i];
           }
-          float average = sum / 5.0;
-          sendAverage(average);
+          latest_average_shock = sum / 5.0; // Update the internal average
+          // Serial.print("ShockManager: Updated average to "); 
+          // Serial.println(latest_average_shock); // Debug
         }
 
         countInWindow = 0;
@@ -326,27 +326,28 @@ class ShockManager
       }
     }
 
-    void sendAverage(float avg) 
-    {
-      Serial.print("Average shocks per 0.2s over 1s: ");
-      Serial.println(avg);
+    float getLatestAverageShock() { // Getter for the latest average
+      return latest_average_shock;
     }
 };
 
 // === Temperature Manager ===
 class TempManager 
 {
+  private:
+    float current_temperature_c = 0.0;
   public:
     void begin() { pinMode(TEMP_SENSOR_PIN, INPUT); }
     void update() 
     {
       int raw = analogRead(TEMP_SENSOR_PIN);
       float voltage = raw * 5.0 / 1023.0;
-      float tempC = voltage * 100;
-      if (tempC > TEMP_THRESHOLD_C) 
-      {
-        espSerial.println("temp:" + String(tempC));
-      }
+      current_temperature_c = voltage * 100;
+      // Serial.print("TempManager: Updated temp to "); 
+      // Serial.println(current_temperature_c); // Debug
+    }
+    float getCurrentTemperature() { // Getter for the current temperature
+    return current_temperature_c;
     }
 };
 
@@ -381,7 +382,7 @@ class RFIDManager
     bool isCardPresent = false;
     bool wasCardPresent = false;
     unsigned long lastSeen = 0;
-    String UID = ""; 
+    String currentUID = "";
     StaticJsonDocument<200> doc;
     SoftwareSerial &espSerial;
   public:
@@ -414,21 +415,26 @@ class RFIDManager
       //카드가 처음 통신되었으면 UID 읽어서 Serial로 전송
       if (isCardPresent && !wasCardPresent) 
       {
-        if (mfrc.PICC_ReadCardSerial()) 
-        {
-          UID = getUIDString();  // UID 멤버 변수에 저장
-          doc["rfid_tag"] = UID;
-          Serial.println("card detected");
-          serializeJson(doc,espSerial);
-          serializeJson(doc,Serial);
-          Serial.println("");
+        if (mfrc.PICC_ReadCardSerial()) {
+          currentUID = getUIDStringFromReader(); // Use a distinct name for the method that reads from mfrc.uid
+          doc.clear(); // Clear previous data
+          doc["purpose"] = "verification";
+          doc["rfid_uid"] = currentUID;
+          
+          // Serial.print("Card detected, UID: " + currentUID + ". Sending to ESP for verification: ");
+          // serializeJson(doc, Serial); // Debug print
+          // Serial.println();
+
+          serializeJson(doc, espSerial); // Send to ESP32
+          espSerial.println(); // Ensure newline for parsing on ESP side
+          
           mfrc.PICC_HaltA();        // ★ 카드 통신 종료
           mfrc.PCD_StopCrypto1();   // ★ 암호화 종료
         } 
         else 
         {
           Serial.println("card detected, but UID read failed");
-          UID = "";
+          currentUID = "";
         }
         wasCardPresent = true;
       }
@@ -437,7 +443,7 @@ class RFIDManager
       {
         Serial.println("card removed");
         wasCardPresent = false;
-        UID = "";
+        currentUID = "";
       }
     }
     //UID 카드에서 읽어서 저장
@@ -451,6 +457,10 @@ class RFIDManager
       }
       uid.toUpperCase();
       return uid;
+    }
+
+    String getActiveUID() { // Getter for the current UID, used for sensor bundle
+      return currentUID;
     }
 };
 
@@ -709,6 +719,10 @@ SystemManager systemManager(lcdManager, alcoholManager, driveManager, rfidManage
                             espManager, bluetoothManager, obstacleManager,
                             shockManager, tempManager, ambientLightManager);
 
+// For periodic sensor data bundle sending
+static unsigned long lastSensorBundleSendTime = 0;
+const unsigned long sensorBundleInterval = 1000; // Send every 1 second
+
 void setup() 
 {
   Serial.begin(BAUD_RATE);
@@ -718,23 +732,72 @@ void setup()
   lcdManager.begin();
   driveManager.begin();
   rfidManager.begin();
-  espManager.sendUID("");  // 초기화
   obstacleManager.begin();
   shockManager.begin();
   tempManager.begin();
   ambientLightManager.begin();
+
+  lcdManager.printLine(0, "System Ready");
+  lcdManager.printLine(1, "Scan RFID Card");
+  // currentState is already WAIT_FOR_AUTH by default
 }
 
 
 void loop() 
 {
   rfidManager.update();
+  shockManager.update(); // Handles shock detection and calculates average internally
+  tempManager.update(); // Handles temperature reading internally
+  ambientLightManager.update(); // Handles light sensor and headlights
+  
+  // Handle incoming data from ESP32 (RFID verification results, YOLO commands)
+  String espData = espManager.getResponse();
+  if (espData != "") {
+    Serial.print("Received from ESP: "); Serial.println(espData);
+    if (espData == "PASS" || espData == "FAIL") {
+      systemManager.handleEspResponse(espData);
+    } else {
+      Serial.println("Unknown command from ESP: " + espData);
+    }
+  }
 
-  String espRes = espManager.getResponse();
-  if (espRes != "") systemManager.handleResponse(espRes);
-
+  // Handle incoming data from Bluetooth (manual drive commands)
   String btCmd = bluetoothManager.getCommand();
-  if (btCmd != "") systemManager.handleDriveCommand(btCmd);
+  if (btCmd != "") {
+    Serial.print("Received from BT: "); Serial.println(btCmd);
+    systemManager.handleDriveCommand(btCmd); 
+  }
+
+  // Check for communication from Bluetooth (manual control commands)
+  if (btSerial.available()) {
+    String btCmd = btSerial.readStringUntil('\n');
+    btCmd.trim();
+    Serial.print("Received from BT: "); Serial.println(btCmd);
+    systemManager.handleDriveCommand(btCmd); 
+  }
+
+  // Periodically send combined sensor data
+  unsigned long currentTime = millis();
+  if (currentTime - lastSensorBundleSendTime >= sensorBundleInterval) {
+    lastSensorBundleSendTime = currentTime;
+
+    String currentRfidUid = rfidManager.getActiveUID();
+    float currentShock = shockManager.getLatestAverageShock();
+    float currentTemp = tempManager.getCurrentTemperature();
+
+    StaticJsonDocument<200> sensorDoc;
+    sensorDoc["purpose"] = "sensor_db"; 
+    sensorDoc["rfid_uid"] = currentRfidUid.isEmpty() ? nullptr : currentRfidUid.c_str(); // Send null if UID is empty, else send UID
+    sensorDoc["shock"] = currentShock;
+    sensorDoc["temperature"] = currentTemp;
+
+    Serial.print("Sending sensor bundle to ESP: ");
+    serializeJson(sensorDoc, Serial); // Debug print
+    Serial.println();
+
+    serializeJson(sensorDoc, espSerial);
+    espSerial.println(); // Ensure newline for parsing on ESP side
+  }
 
   systemManager.update();
 }
