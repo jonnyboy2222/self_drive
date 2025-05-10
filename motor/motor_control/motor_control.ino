@@ -1,8 +1,8 @@
 #include <Servo.h>
 #include <SoftwareSerial.h>
 
-#define BT_RXD 2
-#define BT_TXD 3
+#define BT_RXD 16
+#define BT_TXD 17
 SoftwareSerial bluetooth(BT_RXD, BT_TXD);
 
 class MotorControl {
@@ -55,10 +55,9 @@ class MotorControl {
 };
 
 // 핀 번호 상수
-const int IN1 = 12;
-const int IN2 = 13;
-const int IN3 = 7;
-const int IN4 = 8;
+const int IN2 = 23;
+const int IN3 = 24;
+const int IN4 = 25;
 const int IN5 = 5;
 const int IN6 = 6;
 
@@ -70,7 +69,7 @@ String input = "";
 
 void setup() {
   bluetooth.begin(9600);  
-  steering.attach(11); // 서보모터 핀
+  steering.attach(9); // 서보모터 핀
   steering.write(90); // 초기 각도
 }
 
