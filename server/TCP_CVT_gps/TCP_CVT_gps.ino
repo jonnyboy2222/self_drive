@@ -8,7 +8,7 @@
 #include <TinyGPS++.h>
 
 TinyGPSPlus gps;
-SoftwareSerial gpsSerial(4, 5); // Set up GPS serial communication
+HardwareSerial gpsSerial(2);
 
 
 // --- WiFi Configuration ---
@@ -28,10 +28,14 @@ const uint16_t python_server_port = 12345;
 #define RXD2 3 // connected to Arduino TX
 #define TXD2 1 // connected to Arduino RX
 
+#define RXD3 15
+#define TXD3 14
+
 // --- RTOS Configuration ---
 // pointer to a task to pause, resume, kill the task
 TaskHandle_t TaskUARTReceiveHandle;
 TaskHandle_t TaskNetworkSendHandle;
+TaskHandle_t TaskGpsAttachHandle;
 QueueHandle_t sensorDataQueue;
 QueueHandle_t gpsRequestQueue;
 QueueHandle_t gpsDataQueue;
@@ -299,7 +303,7 @@ void setup() {
     // Serial.begin(115200);
     // Serial.println("Booting ESP32-CAM...");
 
-    gpsSerial.begin(9600);
+    gpsSerial.begin(9600, SERIAL_8N1, RXD3, TXD3);
     // Initialize Serial1 for Arduino communication
     // Baud rate should match Arduino's Serial.begin() rate (e.g., 9600)
     Serial1.begin(9600, SERIAL_8N1, RXD2, TXD2);
@@ -357,7 +361,14 @@ void setup() {
         &TaskNetworkSendHandle, // Task handle
         1);                   // Core ID (1)
 
-    
+    xTaskCreatePinnedToCore(
+        gpsAttachTask,          // Task function
+        "GPS Attach Task",      // Name for debugging
+        4096,                   // Stack size
+        NULL,                   // Task input parameter
+        1,                      // Priority
+        &TaskGpsAttachHandle,   // Task handle
+        0);                       // Core ID (0)
 
     // Serial.println("Setup complete. System running.");
 }
