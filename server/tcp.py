@@ -30,41 +30,43 @@ def handle_client(conn, addr):
                 break
 
             try:
+                print(f"[DEBUG] Received data: {data.decode()}")
                 message = json.loads(data.decode())
             except json.JSONDecodeError:
-                print("[ERROR] Invalid JSON received.")
+                print(f"[ERROR] Invalid JSON received: {data.decode()}")
                 continue
 
-            sensor_type = message.get("sensor")
-            timestamp = message.get("time")
-            value = message.get("data")
-            rfid = message.get("rfid_tag")
+            purpose = message.get("purpose")
 
-            if rfid:
-                rfid_tag = rfid
-                print(f"[INFO] RFID Tag Received: {rfid_tag}")
+            if purpose == "verification":
+                rfid_uid = message.get("rfid_uid")
+                print(f"[INFO] RFID UID Received: {rfid_uid}")
                 verified = False
 
                 with get_db_connection() as conn_db:
                     with conn_db.cursor() as cursor:
-                        sql = "SELECT COUNT(*) FROM authorized_rfids WHERE tag_id = %s"
-                        cursor.execute(sql, (rfid_tag,))
+                        sql = "SELECT COUNT(*) FROM authorized_rfids WHERE uid = %s"
+                        cursor.execute(sql, (rfid_uid,))
                         result = cursor.fetchone()
                         if result and result[0] > 0:
                             verified = True
 
                 response = "PASS" if verified else "FAIL"
                 conn.sendall(response.encode() + b"\n")
-                print(f"[INFO] RFID Tag {rfid_tag} verification result sent: {response}")
+                print(f"[INFO] RFID UID {rfid_uid} verification result sent: {response}")
 
             else:
+                rfid_uid = message.get("rfid_uid")
+                shock = message.get("shock")
+                temp = message.get("temperature")
+
                 # stores data to db
-                value_to_store = json.dumps(value) if isinstance(value, list) else value
+                # value_to_store = json.dumps(value) if isinstance(value, list) else value
                 with get_db_connection() as conn_db:
                     with conn_db.cursor() as cursor:
-                        sql = "INSERT INTO test (sensor, realtime, data) VALUES (%s, %s, %s)"
-                        cursor.execute(sql, (sensor_type, timestamp, value_to_store))
-                print(f"[INFO] Sensor data from {sensor_type} stored in DB.")
+                        sql = "INSERT INTO test (uid, shock, temperature) VALUES (%s, %s, %s)"
+                        cursor.execute(sql, (rfid_uid, shock, temp))
+                print(f"[INFO] Sensor data successfully stored in DB.")
 
     except Exception as e:
         print(f"[ERROR] Unexpected error: {e}")
@@ -75,10 +77,17 @@ def handle_client(conn, addr):
 HOST = "0.0.0.0"
 PORT = 12345
 
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
+server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+try:
     server_socket.bind((HOST, PORT))
     server_socket.listen()
     print(f"[INFO] TCP Server listening on {HOST}:{PORT}")
     while True:
         conn, addr = server_socket.accept()
         threading.Thread(target=handle_client, args=(conn, addr), daemon=True).start()
+
+except KeyboardInterrupt:
+    print("[INFO] Server interrupted by user (Ctrl+C).")
+finally:
+    server_socket.close()  # Ensure socket is properly closed when the server is interrupted
+    print("[INFO] Server socket closed. Port released.")

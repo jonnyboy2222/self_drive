@@ -1,40 +1,71 @@
-#include <LiquidCrystal.h>
-#include <SoftwareSerial.h>
 #include <SPI.h>
 #include <MFRC522.h>
+#include <ArduinoJson.h>
+#include <LiquidCrystal.h>
+#include <SoftwareSerial.h>
+#include <Servo.h>
+
+#define BAUD_RATE 9600
+#define ESP_BAUD_RATE 9600
+#define BT_BAUD_RATE 9600
 
 // === 핀 정의 ===
-#define ALCOHOL_SENSOR_PIN A0
-#define MOTOR_L_IN1 4
-#define MOTOR_L_IN2 5
-#define MOTOR_R_IN1 6
-#define MOTOR_R_IN2 7
-#define RFID_RST_PIN 9
-#define RFID_SS_PIN 10
-#define RFID_DEBOUNCE 1000
-#define THRESHOLD 400
-#define ULTRASONIC_TRIG  A1
-#define ULTRASONIC_ECHO  A2
-#define BUZZER_PIN       A3
-#define SHOCK_SENSOR_PIN A4
-#define SHOCK_THRESHOLD  600
-#define TEMP_SENSOR_PIN  A5
-#define TEMP_THRESHOLD_C 40
-#define LIGHT_SENSOR_PIN A6
-#define LIGHT_THRESHOLD  300
-#define HEADLIGHT_LED_PIN A7
+
+// 통신
+#define ESP_RX_PIN 14
+#define ESP_TX_PIN 15
+SoftwareSerial espSerial(ESP_RX_PIN, ESP_TX_PIN);  // ESP32
+
+#define BT_RXD 2
+#define BT_TXD 3
+SoftwareSerial btSerial(BT_RXD, BT_TXD);    // Bluetooth
+
+// 제어
+#define MOTOR_L_IN1 22
+#define MOTOR_L_IN2 23
+#define MOTOR_R_IN1 24
+#define MOTOR_R_IN2 25
+#define MOTOR_1_SPEED 5
+#define MOTOR_2_SPEED 6
+#define SERVO 9
+
+Servo steering;
+String input = ""
+
+// 센서
+
+#define SHOCK_SENSOR_PIN 26
+
+#define ULTRASONIC_TRIG  28
+#define ULTRASONIC_ECHO  29
 #define MAX_DISTANCE_CM  150
 #define MIN_DISTANCE_CM  10
 
-SoftwareSerial espSerial(12, 13);  // ESP32
-SoftwareSerial btSerial(8, 11);    // Bluetooth
+#define TEMP_SENSOR_PIN  A0
+#define TEMP_THRESHOLD_C 40
 
-enum DriveState {
-  WAIT_FOR_AUTH,
-  MEASURING,
-  ACCESS_GRANTED,
-  ACCESS_DENIED
-};
+#define ALCOHOL_SENSOR_PIN A1
+
+#define HEADLIGHT_LED_PIN A2
+
+// 출력
+#define LCD_RS_PIN 30
+#define LCD_EN_PIN 31
+#define LCD_D4_PIN 32
+#define LCD_D5_PIN 33
+#define LCD_D6_PIN 34
+#define LCD_D7_PIN 35
+
+#define BUZZER_PIN 10
+
+#define LIGHT_SENSOR_PIN 13
+#define LIGHT_THRESHOLD  300
+
+// RFID
+#define RFID_RST_PIN 44
+#define RFID_SS_PIN 10
+#define RFID_DEBOUNCE 1000
+#define THRESHOLD 400
 
 
 // === LCD Manager ===
@@ -64,39 +95,44 @@ public:
 
 // === Drive Motor Manager ===
 class DriveManager {
-public:
-  void begin() {
-    pinMode(MOTOR_L_IN1, OUTPUT);
-    pinMode(MOTOR_L_IN2, OUTPUT);
-    pinMode(MOTOR_R_IN1, OUTPUT);
-    pinMode(MOTOR_R_IN2, OUTPUT);
-    stop();
-  }
-  void forward() {
-    isReversing = false;
-    digitalWrite(MOTOR_L_IN1, HIGH); digitalWrite(MOTOR_L_IN2, LOW);
-    digitalWrite(MOTOR_R_IN1, HIGH); digitalWrite(MOTOR_R_IN2, LOW);
-  }
-  void backward() {
-    isReversing = true;
-    digitalWrite(MOTOR_L_IN1, LOW); digitalWrite(MOTOR_L_IN2, HIGH);
-    digitalWrite(MOTOR_R_IN1, LOW); digitalWrite(MOTOR_R_IN2, HIGH);
-  }
-  void left() {
-    isReversing = false;
-    digitalWrite(MOTOR_L_IN1, LOW); digitalWrite(MOTOR_L_IN2, LOW);
-    digitalWrite(MOTOR_R_IN1, HIGH); digitalWrite(MOTOR_R_IN2, LOW);
-  }
-  void right() {
-    isReversing = false;
-    digitalWrite(MOTOR_L_IN1, HIGH); digitalWrite(MOTOR_L_IN2, LOW);
-    digitalWrite(MOTOR_R_IN1, LOW); digitalWrite(MOTOR_R_IN2, LOW);
-  }
-  void stop() {
-    isReversing = false;
-    digitalWrite(MOTOR_L_IN1, LOW); digitalWrite(MOTOR_L_IN2, LOW);
-    digitalWrite(MOTOR_R_IN1, LOW); digitalWrite(MOTOR_R_IN2, LOW);
-  }
+  public:
+    void begin() {
+      pinMode(MOTOR_L_IN1, OUTPUT);
+      pinMode(MOTOR_L_IN2, OUTPUT);
+      pinMode(MOTOR_R_IN1, OUTPUT);
+      pinMode(MOTOR_R_IN2, OUTPUT);
+      pinMode(MOTOR_1_SPEED, OUTPUT);
+      pinMode(MOTOR_2_SPEED, OUTPUT);
+      steering.attach(SERVO);
+      steering.write(90);
+    }
+
+    void moveForward(int speed = 150) {
+      digitalWrite(MOTOR_L_IN1, HIGH);
+      digitalWrite(MOTOR_L_IN2, LOW);
+      digitalWrite(MOTOR_R_IN1, HIGH);
+      digitalWrite(MOTOR_R_IN2, LOW);
+      analogWrite(MOTOR_1_SPEED, speed);
+      analogWrite(MOTOR_2_SPEED, speed);
+    }
+
+    void moveBackward(int speed = 150) {
+      digitalWrite(MOTOR_L_IN1, LOW);
+      digitalWrite(MOTOR_L_IN2, HIGH);
+      digitalWrite(MOTOR_R_IN1, LOW);
+      digitalWrite(MOTOR_R_IN2, HIGH);
+      analogWrite(MOTOR_1_SPEED, speed);
+      analogWrite(MOTOR_2_SPEED, speed);
+    }
+
+    void stopMotors() {
+      digitalWrite(MOTOR_L_IN1, LOW);
+      digitalWrite(MOTOR_L_IN2, LOW);
+      digitalWrite(MOTOR_R_IN1, LOW);
+      digitalWrite(MOTOR_R_IN2, LOW);
+      analogWrite(MOTOR_1_SPEED, 0);
+      analogWrite(MOTOR_2_SPEED, 0);
+    }
 };
 
 // === Obstacle Alert Manager (Ultrasonic + Buzzer) ===
@@ -133,14 +169,58 @@ public:
 
 // === Shock Sensor Manager ===
 class ShockManager {
-public:
-  void begin() { pinMode(SHOCK_SENSOR_PIN, INPUT); }
-  void update() {
-    int value = analogRead(SHOCK_SENSOR_PIN);
-    if (value > SHOCK_THRESHOLD) {
-      espSerial.println("shock:" + String(value));
+  private:
+    uint8_t pin;
+    unsigned long lastWindowTime;
+    const unsigned long windowDuration = 200; // 0.2초
+    int buffer[5];
+    int bufferIndex;
+    int countInWindow;
+    bool lastSensorState;
+
+  public:
+    ShockManager(uint8_t sensorPin) : pin(sensorPin), lastWindowTime(0), bufferIndex(0), countInWindow(0), lastSensorState(LOW) {
+      for (int i = 0; i < 5; i++) buffer[i] = 0;
     }
-  }
+
+    void begin() {
+      pinMode(pin, INPUT);
+      lastWindowTime = millis();
+    }
+
+    void update() {
+      bool currentSensorState = digitalRead(pin);
+
+      // 상승 에지 감지 (LOW -> HIGH)
+      if (currentSensorState == HIGH && lastSensorState == LOW) {
+        countInWindow++;
+      }
+      lastSensorState = currentSensorState;
+
+      unsigned long currentTime = millis();
+      if (currentTime - lastWindowTime >= windowDuration) {
+        buffer[bufferIndex] = countInWindow;
+        bufferIndex = (bufferIndex + 1) % 5;
+
+        // 1초 주기로 평균 계산 및 전송
+        if (bufferIndex == 0) {
+          int sum = 0;
+          for (int i = 0; i < 5; i++) {
+            sum += buffer[i];
+          }
+          float average = sum / 5.0;
+          sendAverage(average);
+        }
+
+        countInWindow = 0;
+        lastWindowTime = currentTime;
+      }
+    }
+
+    void sendAverage(float avg) {
+      Serial.print("Average shocks per 0.2s over 1s: ");
+      Serial.println(avg);
+    }
 };
 
 // === Temperature Manager ===
@@ -182,27 +262,61 @@ private:
   bool isCardPresent = false;
   bool wasCardPresent = false;
   unsigned long lastSeen = 0;
-
+  String UID = ""; 
+  StaticJsonDocument<200> doc;
+  SoftwareSerial &espSerial;
 public:
-  RFIDManager(byte ssPin, byte rstPin) : mfrc(ssPin, rstPin) {}
-  void begin() { mfrc.PCD_Init(); }
+  
+  RFIDManager(byte ssPin, byte rstPin, SoftwareSerial &esp) : mfrc(ssPin, rstPin),espSerial(esp) {}
 
-  String checkNewUID() {
-    byte bufferATQA[2];
-    byte bufferSize = sizeof(bufferATQA);
-    MFRC522::StatusCode status = mfrc.PICC_RequestA(bufferATQA, &bufferSize);
-    if (status == MFRC522::STATUS_OK) {
-      lastSeen = millis(); isCardPresent = true;
-    } else if (isCardPresent && millis() - lastSeen > RFID_DEBOUNCE) {
-      isCardPresent = false;
-    }
-    if (isCardPresent && !wasCardPresent && mfrc.PICC_ReadCardSerial()) {
-      wasCardPresent = true; return getUIDString();
-    }
-    if (!isCardPresent && wasCardPresent) wasCardPresent = false;
-    return "";
+  void begin() {
+    mfrc.PCD_Init();
   }
 
+  void update() {
+    byte bufferATQA[2];
+    byte bufferSize = sizeof(bufferATQA);
+    //카드가 리더 범위에 들어왔는지 판단
+    MFRC522::StatusCode status = mfrc.PICC_RequestA(bufferATQA, &bufferSize);
+    //카드가 통신되면 lastSeen 시간 저장, 카드 존재 true 저장.
+    if (status == MFRC522::STATUS_OK) 
+    {
+      lastSeen = millis();
+      isCardPresent = true;
+    } 
+    //카드가 통신안되면
+    else 
+    { //카드가 존재했었고, 없어진 시간이 debounce 보다 크면 카드 존재 false저장.
+      if (isCardPresent && millis() - lastSeen > RFID_DEBOUNCE_TIME) 
+      {
+        isCardPresent = false;
+      }
+    }
+    //카드가 처음 통신되었으면 UID 읽어서 Serial로 전송
+    if (isCardPresent && !wasCardPresent) {
+      if (mfrc.PICC_ReadCardSerial()) {
+        UID = getUIDString();  // UID 멤버 변수에 저장
+        doc["rfid_tag"] = UID;
+        Serial.println("card detected");
+        serializeJson(doc,espSerial);
+        serializeJson(doc,Serial);
+        Serial.println("");
+        mfrc.PICC_HaltA();        // ★ 카드 통신 종료
+        mfrc.PCD_StopCrypto1();   // ★ 암호화 종료
+      } else {
+        Serial.println("card detected, but UID read failed");
+        UID = "";
+      }
+      wasCardPresent = true;
+    }
+    //카드가 처음 통신 안되면 UID 초기화
+    if (!isCardPresent && wasCardPresent) {
+      Serial.println("card removed");
+      wasCardPresent = false;
+      UID = "";
+    }
+  }
+  //UID 카드에서 읽어서 저장
   String getUIDString() {
     String uid = "";
     for (byte i = 0; i < mfrc.uid.size; i++) {
@@ -212,6 +326,71 @@ public:
     uid.toUpperCase();
     return uid;
   }
+};
+
+// GPS
+class GPSWiFiSender {
+private:
+    const char* ssid;
+    const char* password;
+    const char* serverIP;
+    uint16_t serverPort;
+
+    SoftwareSerial gpsSerial;
+    TinyGPSPlus gps;
+    WiFiClient client;
+
+public:
+    GPSWiFiSender(const char* wifiSSID, const char* wifiPass, const char* serverIp, uint16_t port)
+        : ssid(wifiSSID), password(wifiPass), serverIP(serverIp), serverPort(port), gpsSerial(D5, D6) {} // D5=RX, D6=TX
+
+    void begin() {
+        Serial.begin(115200);
+        gpsSerial.begin(9600);
+
+        WiFi.begin(ssid, password);
+        Serial.print("Connecting to WiFi");
+        while (WiFi.status() != WL_CONNECTED) {
+            delay(500);
+            Serial.print(".");
+        }
+        Serial.println("\nWiFi Connected: " + WiFi.localIP().toString());
+    }
+
+    void updateGPS() {
+        while (gpsSerial.available()) {
+            gps.encode(gpsSerial.read());
+        }
+    }
+
+    bool isLocationValid() {
+        return gps.location.isValid();
+    }
+
+    String getGPSData() {
+        if (gps.location.isUpdated()) {
+            String data = String("LAT:") + gps.location.lat() + ",LON:" + gps.location.lng();
+            return data;
+        }
+        return "";
+    }
+
+    void sendData() {
+        if (!client.connected()) {
+            Serial.println("Connecting to server...");
+            if (!client.connect(serverIP, serverPort)) {
+                Serial.println("Connection failed.");
+                return;
+            }
+            Serial.println("Connected to server.");
+        }
+
+        String data = getGPSData();
+        if (data.length() > 0) {
+            client.println(data);
+            Serial.println("Sent: " + data);
+        }
+    }
 };
 
 // === ESP32 Manager ===
@@ -286,21 +465,22 @@ public:
   }
 
   void handleDriveCommand(const String &cmd) {
-    if (currentState != ACCESS_GRANTED) {
-      lcd.printLine(0, "CMD BLOCKED");
-      return;
+    if (cmd.startsWith("X")) {
+      int angle = cmd.substring(1).toInt();
+      steering.write(angle);
+    } else if (cmd.length() > 0) {
+      char action = cmd.charAt(0);
+      switch (action) {
+        case 'F': motor.moveForward(); break;
+        case 'B': motor.moveBackward(); break;
+        case 'S': motor.stopMotors(); break;
+      }
     }
-    if (cmd == "전진") drive.forward();
-    else if (cmd == "후진") drive.backward();
-    else if (cmd == "좌회전") drive.left();
-    else if (cmd == "우회전") drive.right();
-    else if (cmd == "정지") drive.stop();
-    else lcd.printLine(1, "BT: UNKNOWN");
   }
 };
 
 // === 인스턴스 생성 ===
-LCDManager lcdManager(2, 3, 8, 9, 10, 11);
+LCDManager lcdManager(LCD_RS_PIN,LCD_EN_PIN,LCD_D4_PIN,LCD_D5_PIN,LCD_D6_PIN,LCD_D7_PIN);
 AlcoholManager alcoholManager;
 DriveManager driveManager;
 RFIDManager rfidManager(RFID_SS_PIN, RFID_RST_PIN);
@@ -308,14 +488,14 @@ ESPManager espManager(espSerial);
 BluetoothManager bluetoothManager(btSerial);
 SystemManager systemManager(lcdManager, alcoholManager, driveManager);
 ObstacleManager obstacleManager;
-ShockManager shockManager;
+ShockManager shockManager(SHOCK_SENSOR_PIN);
 TempManager tempManager;
 AmbientLightManager ambientLightManager;
 
 void setup() {
-  Serial.begin(9600);
-  espSerial.begin(9600);
-  btSerial.begin(9600);
+  Serial.begin(BAUD_RATE);
+  espSerial.begin(ESP_BAUD_RATE);
+  btSerial.begin(BT_BAUD_RATE);
   SPI.begin();
   lcdManager.begin();
   driveManager.begin();
