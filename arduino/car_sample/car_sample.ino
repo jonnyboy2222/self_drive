@@ -45,6 +45,7 @@ String input = "";
 #define TEMP_THRESHOLD_C 40
 
 #define ALCOHOL_SENSOR_PIN A1
+#define SWITCH_PIN 36
 
 #define HEADLIGHT_LED_PIN A2
 
@@ -65,7 +66,7 @@ String input = "";
 #define RFID_RST_PIN 44
 #define RFID_SS_PIN 10
 #define RFID_DEBOUNCE_TIME 1000
-#define THRESHOLD 400
+
 
 // === LCD Manager ===
 class LCDManager
@@ -228,6 +229,9 @@ class DriveManager
 // === Obstacle Alert Manager (Ultrasonic + Buzzer) ===
 class ObstacleManager 
 {
+  private:
+    bool isReversing = false;
+
   public:
     void begin() 
     {
@@ -235,7 +239,9 @@ class ObstacleManager
       pinMode(ULTRASONIC_ECHO, INPUT);
       pinMode(BUZZER_PIN, OUTPUT);
     }
-
+    void setReversing(bool reversing) {
+      isReversing = reversing;
+    }
     void update() 
     {
       if (!isReversing) return;
@@ -449,6 +455,7 @@ class RFIDManager
 };
 
 // GPS // should be moved to esp32-cam
+/*
 class GPSWiFiSender 
 {
   private:
@@ -524,7 +531,7 @@ class GPSWiFiSender
           }
       }
 };
-
+*/
 // === ESP32 Manager ===
 class ESPManager
 {
@@ -581,10 +588,20 @@ class SystemManager
     LCDManager &lcd;
     AlcoholManager &alcohol;
     DriveManager &drive;
+    RFIDManager &rfid;
+    ESPManager &esp;
+    BluetoothManager &bt;
+    ObstacleManager &obstacle;
+    ShockManager &shock;
+    TempManager &temp;
+    AmbientLightManager &ambient;
+
     DriveState currentState = WAIT_FOR_AUTH;
   public:
-    SystemManager(LCDManager &l, AlcoholManager &a, DriveManager &d)
-      : lcd(l), alcohol(a), drive(d) {}
+    SystemManager(LCDManager &l, AlcoholManager &a, DriveManager &d, RFIDManager &r,
+                  ESPManager &e, BluetoothManager &b, ObstacleManager &o, ShockManager &s,
+                  TempManager &t, AmbientLightManager &am)
+      : lcd(l), alcohol(a), drive(d), rfid(r), esp(e), bt(b), obstacle(o), shock(s), temp(t), ambient(am) {}
 
     void handleResponse(const String &cmd)
     {
@@ -598,7 +615,7 @@ class SystemManager
       {
         Serial.println("ACCESS DENIED");
         lcd.printLine(0, "ACCESS DENIED");
-        drive.stop();
+        drive.stopMotors();
         currentState = ACCESS_DENIED;
       }
     }
@@ -633,11 +650,18 @@ class SystemManager
             {
               lcd.printLine(0, "ACCESS DENIED");
               Serial.println("ACCESS DENIED");
-              drive.stop();
+              drive.stopMotors();
               currentState = ACCESS_DENIED;
             }
           }
         }
+      }
+      else if (currentState == ACCESS_GRANTED)
+      {
+        obstacle.update();
+        shock.update();
+        temp.update();
+        ambient.update();
       }
     }
 
@@ -653,9 +677,18 @@ class SystemManager
         char action = cmd.charAt(0);
         switch (action) 
         {
-          case 'F': drive.moveForward(); break;
-          case 'B': drive.moveBackward(); break;
-          case 'S': drive.stopMotors(); break;
+          case 'F': 
+            drive.moveForward(); 
+            obstacle.setReversing(false);
+            break;
+          case 'B': 
+            drive.moveBackward(); 
+            obstacle.setReversing(true);
+            break;
+          case 'S': 
+            drive.stopMotors(); 
+            obstacle.setReversing(false);
+            break;
         }
       }
     }
@@ -668,11 +701,13 @@ DriveManager driveManager;
 RFIDManager rfidManager(RFID_SS_PIN, RFID_RST_PIN, espSerial);
 ESPManager espManager(espSerial);
 BluetoothManager bluetoothManager(btSerial);
-SystemManager systemManager(lcdManager, alcoholManager, driveManager);
 ObstacleManager obstacleManager;
 ShockManager shockManager(SHOCK_SENSOR_PIN);
 TempManager tempManager;
 AmbientLightManager ambientLightManager;
+SystemManager systemManager(lcdManager, alcoholManager, driveManager, rfidManager,
+                            espManager, bluetoothManager, obstacleManager,
+                            shockManager, tempManager, ambientLightManager);
 
 void setup() 
 {
@@ -693,12 +728,7 @@ void setup()
 
 void loop() 
 {
-  String uid = rfidManager.checkNewUID();
-  if (uid != "") 
-  {
-    lcdManager.printLine(0, "Send UID: " + uid);
-    espManager.sendUID(uid);
-  }
+  rfidManager.update();
 
   String espRes = espManager.getResponse();
   if (espRes != "") systemManager.handleResponse(espRes);
@@ -707,8 +737,4 @@ void loop()
   if (btCmd != "") systemManager.handleDriveCommand(btCmd);
 
   systemManager.update();
-  obstacleManager.update();
-  shockManager.update();
-  tempManager.update();
-  ambientLightManager.update();
 }
