@@ -291,28 +291,6 @@ class SystemManager
       }
     }
 
-    // void handleDriveCommand(const String &cmd)
-    // {
-    //   if (currentState != ACCESS_GRANTED)
-    //   {
-    //     lcd.printLine(0, "CMD BLOCKED");
-    //     return;
-    //   }
-
-    //   if (cmd == "전진")
-    //     drive.forward();
-    //   else if (cmd == "후진")
-    //     drive.backward();
-    //   else if (cmd == "좌회전")
-    //     drive.left();
-    //   else if (cmd == "우회전")
-    //     drive.right();
-    //   else if (cmd == "정지")
-    //     drive.stop();
-    //   else
-    //     lcd.printLine(1, "BT: UNKNOWN");
-    // }
-
     void handleDriveCommand(const String &cmd) {
       if (cmd.startsWith("X")) {
         int angle = cmd.substring(1).toInt();
@@ -354,10 +332,7 @@ void loop() {
   // put your main code here, to run repeatedly:
   rfidManager.update();
   String espResponse = espManager.getResponse();
-  // if(espResponse != "")
-  // {
-  //   systemManager.handleResponse(espResponse);
-  // }
+
   systemManager.update();
 
   while (bluetooth.available()) {
