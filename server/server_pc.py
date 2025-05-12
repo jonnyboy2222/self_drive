@@ -62,20 +62,29 @@ def handle_client(conn, addr):
                 rest = conn.recv(DB_PACKET_SIZE - 3)
                 if len(rest) < DB_PACKET_SIZE - 3:
                     continue
-                uid = rest[0:4].decode("ascii", errors="replace")
+                uid_hex = rest[0:4].hex().upper()
                 shock = struct.unpack('<f', rest[4:8])[0]
                 temp = struct.unpack('<f', rest[8:12])[0]
                 insert_to_db(shock, temp)
-                print(f"[PC2] Stored DB: UID={uid}, Shock={shock:.2f}, Temp={temp:.2f}")
+                print(f"[PC2] Stored DB: UID={uid_hex}, Shock={shock:.2f}, Temp={temp:.2f}")
 
             elif command == "VF":
                 rest = conn.recv(VF_PACKET_SIZE - 3)
                 if len(rest) < VF_PACKET_SIZE - 3:
                     continue
-                uid = rest[0:4].decode("ascii", errors="replace")
-                print(f"[PC2] Received VF request: UID={uid}")
 
-                result = 1 if uid in VALID_UIDS else 0
+                uid_hex = rest[0:4].hex().upper()
+                print(f"[PC2] Received VF request: UID={uid_hex}")
+
+                try:
+                    with db_pool.connection() as conn_db, conn_db.cursor() as cur:
+                        cur.execute("SELECT EXISTS(SELECT 1 FROM user_uid WHERE uid = %s)", (uid_hex,))
+                        exists = cur.fetchone()[0]
+                        result = 1 if exists else 0
+                except Exception as e:
+                    print(f"[DB ERROR] {e}")
+                    result = 0
+
                 response = bytearray()
                 response.append(PACKET_HEADER)
                 response += b'VF'
