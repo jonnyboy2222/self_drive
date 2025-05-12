@@ -29,14 +29,26 @@ VF_PACKET_SIZE = 7
 VF_RESPONSE_SIZE = 6 # 1(header) + 2(command) + 1(VF_RESP) + 2 (padding)
 
 # Database connection pool
+# db_pool = PooledDB(
+#     creator=pymysql,
+#     maxconnections=5,
+#     mincached=2,
+#     host="localhost",
+#     user="root",
+#     password="4582",
+#     database="johnbase",
+#     charset="utf8mb4",
+#     autocommit=True
+# )
+
 db_pool = PooledDB(
     creator=pymysql,
     maxconnections=5,
     mincached=2,
     host="localhost",
     user="root",
-    password="4582",
-    database="johnbase",
+    password="0303",
+    database="leebase",
     charset="utf8mb4",
     autocommit=True
 )
@@ -53,16 +65,6 @@ def insert_to_db(shock, temp):
         print(f"[DB ERROR] {e}")
     finally:
         conn.close()
-
-# 센서 데이터를 읽고, DB에 저장하는 메서드
-def get_sensor_data(ser):
-    packet = read_aligned_packet(ser)
-    command = packet[1:3].decode("ascii", errors="replace")
-    if command == "DB":
-        shock = struct.unpack('<f', packet[7:11])[0]
-        temp = struct.unpack('<f', packet[11:15])[0]
-        return shock, temp
-    return None, None
 
 def read_aligned_packet(ser):
     while True:
@@ -255,16 +257,23 @@ class SensorThread(QThread):
     def __init__(self,ser):
         super().__init__()
         self.ser = ser
-        self.shock = None
-        self.temp = None
 
     def run(self):
         while True:
-            shock, temp = get_sensor_data(self.ser)
+            shock, temp = self.get_sensor_data()
             if shock is not None and temp is not None:
                 insert_to_db(shock, temp)
                 self.new_data.emit(shock, temp)  # 시그널 발생
             time.sleep(1)
+
+    def get_sensor_data(self):
+        packet = read_aligned_packet(self.ser)
+        command = packet[1:3].decode("ascii", errors="replace")
+        if command == "DB":
+            shock = struct.unpack('<f', packet[7:11])[0]
+            temp = struct.unpack('<f', packet[11:15])[0]
+            return shock, temp
+        return None, None
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
@@ -272,10 +281,12 @@ if __name__ == "__main__":
     ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=TIMEOUT_S)
 
     window = MainWindow()
+    window.sensor_thread = SensorThread(ser)
     window.show()
 
-    sensor_thread = threading.Thread(target=main, daemon=True)
-    sensor_thread.start()
+    # DB 삽입 스레드 시작
+    db_thread = threading.Thread(target=main, daemon=True)
+    db_thread.start()
 
 
     sys.exit(app.exec())
