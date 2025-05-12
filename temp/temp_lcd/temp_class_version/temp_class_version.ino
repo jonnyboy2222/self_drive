@@ -4,10 +4,11 @@ class TempManager
 {
   private:
     const int TEMP_SENSEOR_PIN= A0;
-    const float TEMP_THRESHOLD = 35.0;
+    const float TEMP_THRESHOLD = 37.0;
     unsigned long pre_time = 0;
-    const unsigned long INTERVAL = 500;
+    const unsigned long INTERVAL = 1000;
     float temperature = 0;
+    float overtemperature = 0;
     LiquidCrystal LCD;
 
   public:
@@ -20,12 +21,19 @@ class TempManager
       LCD.print("                ");
     }
 
+
     void measure_Temperature()
     {
-        int adc_value = analogRead(TEMP_SENSEOR_PIN);
-        float voltage = adc_value * (5.0 / 1024.0);
-        temperature = voltage * 100;
-        Serial.println(temperature);
+      int adc_value = analogRead(TEMP_SENSEOR_PIN);
+      float voltage = adc_value * (5.0 / 1024.0);
+      temperature = voltage * 100;
+      // Serial.print("temperature : ");
+      // Serial.println(temperature);
+    }
+
+    float getTemp()
+    {
+      return temperature;
     }
 
     void update_Lcd()
@@ -34,12 +42,20 @@ class TempManager
       LCD.setCursor(0, 0);
       if (temperature >= TEMP_THRESHOLD) 
       {
+        overtemperature = temperature;
         LCD.print("Warning Temp!");
         LCD.setCursor(0, 1);
         LCD.print("Now: ");
-        LCD.print(temperature);
+        LCD.print(overtemperature);
         LCD.print(" C");
+        // Serial.print("overtemp : ")
+        // Serial.println()
       } 
+    }
+
+    float getoverTemp()
+    {
+      return overtemperature ;
     }
 
     void update()
@@ -56,6 +72,9 @@ class TempManager
 };
 
 TempManager tempManager(12,11,5,4,3,2);
+// float temp = 0;
+// float overtemp = 0;
+
 void setup()
 {
   Serial.begin(9600);
@@ -65,4 +84,6 @@ void setup()
 void loop() 
 {
   tempManager.update();
+  float temp = tempManager.getTemp();
+  float overtemp = tempManager.getoverTemp();
 }
