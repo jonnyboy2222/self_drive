@@ -40,11 +40,11 @@ class RCController(QWidget):
         try:
             # 모터 제어 (전진/후진)
             if Qt.Key.Key_W in self.keys_pressed:
-                self.ser.write(b'F\n')
+                self.ser.write(b'MF\n')
             elif Qt.Key.Key_S in self.keys_pressed:
-                self.ser.write(b'B\n')
+                self.ser.write(b'MB\n')
             else:
-                self.ser.write(b'S\n')
+                self.ser.write(b'MS\n')
 
             # 서보 조향 제어
             if Qt.Key.Key_A in self.keys_pressed and Qt.Key.Key_D not in self.keys_pressed:
