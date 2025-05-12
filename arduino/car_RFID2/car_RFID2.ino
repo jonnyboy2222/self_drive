@@ -29,6 +29,13 @@
 #define MOTOR_R_IN1 6
 #define MOTOR_R_IN2 7
 
+const char CMD_VERIFY[] = "VF"
+
+const byte PACKET_HEADER = 0xAA;
+const int VF_PACKET_SIZE = 1 + 2 + 4; // 1(header) + 2(command) + 4(uid)
+
+bool flag = true;
+
 enum DriveState {
     WAIT_FOR_AUTH,
     MEASURING,
@@ -438,5 +445,17 @@ void loop() {
     systemManager.handleResponse(espResponse);
   }
   systemManager.update();
+
+  
+  if (flag == true) { // flag로 onetime 송신
+    flag = false;
+
+    char send_buffer[VF_PACKET_SIZE];
+    send_buffer[0] = PACKET_HEADER;
+    memcpy(send_buffer + 1, CMD_VERIFY, 2);
+    memcpy(send_buffer + 3, UID, 4);
+
+    Serial.write((const uint8_t*)send_buffer, VF_PACKET_SIZE);
+  }
   
 }
