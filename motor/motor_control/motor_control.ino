@@ -1,9 +1,4 @@
 #include <Servo.h>
-#include <SoftwareSerial.h>
-
-#define BT_RXD 16
-#define BT_TXD 17
-SoftwareSerial bluetooth(BT_RXD, BT_TXD);
 
 class MotorControl {
   private:
@@ -44,6 +39,25 @@ class MotorControl {
       analogWrite(in6, speed);
     }
 
+    void turnLeft(int speed = 150) {
+      digitalWrite(in1, LOW);
+      digitalWrite(in2, HIGH);
+      digitalWrite(in3, HIGH);
+      digitalWrite(in4, LOW);
+      analogWrite(in5, speed);
+      analogWrite(in6, speed);
+    }
+
+    void turnRight(int speed = 150) {
+      digitalWrite(in1, HIGH);
+      digitalWrite(in2, LOW);
+      digitalWrite(in3, LOW);
+      digitalWrite(in4, HIGH);
+      analogWrite(in5, speed);
+      analogWrite(in6, speed);
+    }
+
+
     void stopMotors() {
       digitalWrite(in1, LOW);
       digitalWrite(in2, LOW);
@@ -64,37 +78,38 @@ const int IN6 = 6;
 
 
 MotorControl motor(IN1, IN2, IN3, IN4, IN5, IN6); // 모터 컨트롤러 객체 생성
-Servo steering;
+int speed = 150;
 
 String input = "";
 
 void setup() {
-  bluetooth.begin(9600);  
-  steering.attach(9); // 서보모터 핀
-  steering.write(90); // 초기 각도
+  Serial.begin(9600);
 }
 
 void loop() {
-  while (bluetooth.available()) {
-    char c = bluetooth.read();
+  while (Serial.available() > 0) {
+    char c = Serial.read();
     if (c == '\n') {
       handleCommand(input);
       input = "";
     } else {
       input += c;
     }
+
+    Serial.print(c);
   }
 }
 
 void handleCommand(String cmd) {
   if (cmd.startsWith("X")) {
-    int angle = cmd.substring(1).toInt();
-    steering.write(angle);
+    speed = cmd.substring(1).toInt();
   } else if (cmd.length() > 0) {
-    char action = cmd.charAt(0);
+    char action = cmd.charAt(1);
     switch (action) {
       case 'F': motor.moveForward(); break;
       case 'B': motor.moveBackward(); break;
+      case 'L': motor.turnLeft(); break;
+      case 'R': motor.turnRight(); break;
       case 'S': motor.stopMotors(); break;
     }
   }

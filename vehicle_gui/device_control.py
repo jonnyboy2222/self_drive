@@ -7,13 +7,13 @@ from PyQt6.QtCore import *
 
 import mysql.connector
 
-local = mysql.connector.connect(
-    host = 'localhost',
-    port = '3306',
-    user = 'root',
-    database = 'leebase',
-    password = '0303'
-)
+# local = mysql.connector.connect(
+#     host = 'localhost',
+#     port = '3306',
+#     user = 'root',
+#     database = 'leebase',
+#     password = '0303'
+# )
 
 MAIN_UI = "/home/lee/project/self_drive/vehicle_gui/main.ui"
 STATUS_UI = "/home/lee/project/self_drive/vehicle_gui/status.ui"
@@ -30,13 +30,6 @@ class MainWindow(QWidget, main_window):
 
         self.setWindowTitle("Main")
 
-        # # 위젯 찾기 (objectName 기반)
-        # self.timeLabel: QLabel = self.findChild(QLabel, "timeLabel")
-        # self.powerButton: QPushButton = self.findChild(QPushButton, "powerButton")
-        # self.statusButton: QPushButton = self.findChild(QPushButton, "statusButton")
-        # self.infoButton: QPushButton = self.findChild(QPushButton, "infoButton")
-        # self.sensorText: QTextEdit = self.findChild(QTextEdit, "sensorText")
-
         self.power_on = False
 
         # 타이머
@@ -46,7 +39,7 @@ class MainWindow(QWidget, main_window):
         self.update_time()
 
         self.sensor_timer = QTimer()
-        self.sensor_timer.timeout.connect(self.update_sensor)
+        # self.sensor_timer.timeout.connect(self.update_sensor)
 
         # 이벤트 연결
         self.power_btn.clicked.connect(self.toggle_power)
@@ -54,29 +47,28 @@ class MainWindow(QWidget, main_window):
         self.info_btn.clicked.connect(self.show_info)
 
         # 비활성화
-        self.statusButton.setEnabled(False)
-        self.infoButton.setEnabled(False)
+        self.status_btn.setEnabled(False)
+        self.info_btn.setEnabled(False)
 
     def update_time(self):
-        self.timeLabel.setText(QTime.currentTime().toString("hh:mm:ss"))
+        self.time_edit.setText(QTime.currentTime().toString("hh:mm:ss"))
 
     def toggle_power(self):
         self.power_on = not self.power_on
         if self.power_on:
-            self.powerButton.setText("OFF")
-            self.statusButton.setEnabled(True)
-            self.infoButton.setEnabled(True)
+            self.power_btn.setText("OFF")
+            self.status_btn.setEnabled(True)
+            self.info_btn.setEnabled(True)
             self.sensor_timer.start(1000)
         else:
-            self.powerButton.setText("ON")
-            self.statusButton.setEnabled(False)
-            self.infoButton.setEnabled(False)
-            self.sensorText.clear()
+            self.power_btn.setText("ON")
+            self.status_btn.setEnabled(False)
+            self.info_btn.setEnabled(False)
             self.sensor_timer.stop()
 
-    def update_sensor(self):
-        value = "Value"
-        self.sensorText.append(value)
+    # def update_sensor(self):
+    #     value = "Value"
+    #     self.sensorText.append(value)
 
     def show_status(self):
         self.status_window = StatusWindow(self)
@@ -107,7 +99,7 @@ class StatusWindow(QWidget, status_window):
         self.close()
 
 
-class InfoWindow(QWidget):
+class InfoWindow(QWidget,info_window):
     def __init__(self, parent):
         super().__init__()
         self.setupUi(self)
@@ -121,15 +113,16 @@ class InfoWindow(QWidget):
         self.main_btn.clicked.connect(self.return_main)
 
     def load_driver_data(self):
-        cur = local.cursor(buffered=True)
-        cur.execute('SELECT temp, shcok FROM sensor_data')
-        result = cur.fetchall()
+        # cur = local.cursor(buffered=True)
+        # cur.execute('SELECT temp, shcok FROM sensor_data')
+        # result = cur.fetchall()
 
-        self.driverText.clear()
+        # self.driverText.clear()
 
-        for row in result:
-            self.driverText.append(f"Temp: {row[0]}, Shock: {row[1]}")
-        cur.close()
+        # for row in result:
+        #     self.driverText.append(f"Temp: {row[0]}, Shock: {row[1]}")
+        # cur.close()
+        self.info_edit.setText("info")
 
     def return_main(self):
         self.parent.show()
