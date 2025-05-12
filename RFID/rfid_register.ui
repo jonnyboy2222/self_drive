@@ -206,7 +206,7 @@
   <widget class="QPushButton" name="btnRegister">
    <property name="geometry">
     <rect>
-     <x>450</x>
+     <x>650</x>
      <y>230</y>
      <width>181</width>
      <height>26</height>
@@ -282,7 +282,7 @@
   <widget class="QPushButton" name="btnConfirm">
    <property name="geometry">
     <rect>
-     <x>260</x>
+     <x>270</x>
      <y>230</y>
      <width>181</width>
      <height>26</height>
@@ -290,6 +290,19 @@
    </property>
    <property name="text">
     <string>확인</string>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="btnReset">
+   <property name="geometry">
+    <rect>
+     <x>460</x>
+     <y>230</y>
+     <width>181</width>
+     <height>26</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>초기화</string>
    </property>
   </widget>
  </widget>
