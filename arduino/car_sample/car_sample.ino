@@ -542,52 +542,52 @@ class GPSWiFiSender
       }
 };
 */
-// === ESP32 Manager ===
-class ESPManager
-{
-  private:
-    SoftwareSerial &esp;
+// // === ESP32 Manager ===
+// class ESPManager
+// {
+//   private:
+//     SoftwareSerial &esp;
 
-  public:
-    ESPManager(SoftwareSerial &serial) : esp(serial)
-    {
-    }
+//   public:
+//     ESPManager(SoftwareSerial &serial) : esp(serial)
+//     {
+//     }
 
-    void sendUID(const String &uid)
-    {
-      esp.println(uid);
-    }
+//     void sendUID(const String &uid)
+//     {
+//       esp.println(uid);
+//     }
 
-    String getResponse()
-    {
-      if (esp.available())
-      {
-        String res = esp.readStringUntil('\n');
-        res.trim();
-        return res;
-      }
-      return "";
-    }
-};
+//     String getResponse()
+//     {
+//       if (esp.available())
+//       {
+//         String res = esp.readStringUntil('\n');
+//         res.trim();
+//         return res;
+//       }
+//       return "";
+//     }
+// };
 
-// === Bluetooth Manager ===
-class BluetoothManager 
-{
-  private:
-    SoftwareSerial &bt;
-  public:
-    BluetoothManager(SoftwareSerial &serial) : bt(serial) {}
-    String getCommand() 
-    {
-      if (bt.available()) 
-      {
-        String cmd = bt.readStringUntil('\n');
-        cmd.trim();
-        return cmd;
-      }
-      return "";
-    }
-};
+// // === Bluetooth Manager ===
+// class BluetoothManager 
+// {
+//   private:
+//     SoftwareSerial &bt;
+//   public:
+//     BluetoothManager(SoftwareSerial &serial) : bt(serial) {}
+//     String getCommand() 
+//     {
+//       if (bt.available()) 
+//       {
+//         String cmd = bt.readStringUntil('\n');
+//         cmd.trim();
+//         return cmd;
+//       }
+//       return "";
+//     }
+// };
 
 enum DriveState { WAIT_FOR_AUTH, MEASURING, ACCESS_GRANTED, ACCESS_DENIED };
 
@@ -726,8 +726,8 @@ const unsigned long sensorBundleInterval = 1000; // Send every 1 second
 void setup() 
 {
   Serial.begin(BAUD_RATE);
-  espSerial.begin(ESP_BAUD_RATE);
-  btSerial.begin(BT_BAUD_RATE);
+  // espSerial.begin(ESP_BAUD_RATE);
+  // btSerial.begin(BT_BAUD_RATE);
   SPI.begin();
   lcdManager.begin();
   driveManager.begin();
@@ -761,19 +761,11 @@ void loop()
     }
   }
 
-  // Handle incoming data from Bluetooth (manual drive commands)
-  String btCmd = bluetoothManager.getCommand();
-  if (btCmd != "") {
-    Serial.print("Received from BT: "); Serial.println(btCmd);
-    systemManager.handleDriveCommand(btCmd); 
-  }
-
-  // Check for communication from Bluetooth (manual control commands)
-  if (btSerial.available()) {
-    String btCmd = btSerial.readStringUntil('\n');
-    btCmd.trim();
-    Serial.print("Received from BT: "); Serial.println(btCmd);
-    systemManager.handleDriveCommand(btCmd); 
+  // Check for communication (manual control commands)
+  if (Serial.available()) {
+    String Cmd = Serial.read();
+    Serial.print("Received from BT: "); Serial.println(Cmd);
+    systemManager.handleDriveCommand(Cmd); 
   }
 
   // Periodically send combined sensor data

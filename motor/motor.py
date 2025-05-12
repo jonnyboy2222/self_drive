@@ -13,10 +13,10 @@ class RCController(QWidget):
 
         self.ser = None
         try:
-            self.ser = serial.Serial('/dev/rfcomm0', 9600, timeout=1)
-            print("Successfully connected to /dev/rfcomm0")
+            self.ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
+            print("Successfully connected to /dev/ttyACM0")
         except serial.SerialException as e:
-            print(f"Error opening serial port /dev/rfcomm0: {e}. Please check the connection and permissions.")
+            print(f"Error opening serial port /dev/ttyACM0: {e}. Please check the connection and permissions.")
 
         self.keys_pressed = set()
         self.servo_angle = 90
@@ -35,7 +35,7 @@ class RCController(QWidget):
 
     def update_command(self):
         if not self.ser or not self.ser.is_open:
-            print("Serial port /dev/rfcomm0 not available. Cannot send command.")
+            print("Serial port /dev/ttyACM0 not available. Cannot send command.")
             return 
         try:
             # 모터 제어 (전진/후진)
@@ -60,14 +60,14 @@ class RCController(QWidget):
                 command = f"X{self.servo_angle}\n"
                 self.ser.write(command.encode())
         except serial.SerialException as e:
-            print(f"Serial write error on /dev/rfcomm0: {e}. Connection may be lost.")
+            print(f"Serial write error on /dev/ttyACM0: {e}. Connection may be lost.")
             if self.ser and self.ser.is_open:
                 self.ser.close() 
 
     def closeEvent(self, event):
         """Properly close the serial port when the application exits."""
         if self.ser and self.ser.is_open:
-            print("Closing serial port /dev/rfcomm0.")
+            print("Closing serial port /dev/ttyACM0.")
             try:
                 self.ser.write(b'S\n') 
             except serial.SerialException:
