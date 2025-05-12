@@ -1,25 +1,12 @@
 #include <SPI.h>
 #include <MFRC522.h>
 #include <ArduinoJson.h>
-#include <LiquidCrystal.h>
-#include <SoftwareSerial.h>
 
 #define BAUD_RATE 9600
-#define ESP_BAUD_RATE 9600
-
-#define LCD_RS_PIN 2
-#define LCD_EN_PIN 3
-#define LCD_D4_PIN 4
-#define LCD_D5_PIN 5
-#define LCD_D6_PIN 6
-#define LCD_D7_PIN 7
 
 #define RFID_RST_PIN 9
 #define RFID_SS_PIN 10
 #define RFID_DEBOUNCE_TIME 500
-
-#define ESP_RX_PIN A0
-#define ESP_TX_PIN A1
 
 #define ALCOHOL_SENSOR_PIN A2
 #define SWITCH_PIN 8
@@ -29,7 +16,7 @@
 #define MOTOR_R_IN1 6
 #define MOTOR_R_IN2 7
 
-const char CMD_VERIFY[] = "VF"
+const char CMD_VERIFY[] = "VF";
 
 const byte PACKET_HEADER = 0xAA;
 const int VF_PACKET_SIZE = 1 + 2 + 4; // 1(header) + 2(command) + 4(uid)
@@ -43,140 +30,89 @@ enum DriveState {
     ACCESS_DENIED
 };
 
-// === LCD Manager ===
-class LCDManager
+// === RFID Manager ===
+class RFIDManager
 {
   private:
-    LiquidCrystal lcd;
+    MFRC522 mfrc;
+    bool isCardPresent = false;
+    bool wasCardPresent = false;
+    bool newCardDetected = false;
+    unsigned long lastSeen = 0;
+    byte UID[4] = {0};
 
   public:
-    LCDManager(uint8_t rs, uint8_t en, uint8_t d4, uint8_t d5, uint8_t d6, uint8_t d7)
-      : lcd(rs, en, d4, d5, d6, d7)
+    RFIDManager(byte ssPin, byte rstPin) : mfrc(ssPin, rstPin)
     {
     }
 
     void begin()
     {
-      lcd.begin(16, 2);
-      lcd.clear();
-      lcd.print("Init");
+      mfrc.PCD_Init();
     }
 
-    void printLine(int row, const String &text)
+    void update()
     {
-      lcd.setCursor(0, row);
-      lcd.print("                ");
-      lcd.setCursor(0, row);
-      lcd.print(text);
-    }
+      newCardDetected = false;
 
-    void clear()
-    {
-      lcd.clear();
-    }
-};
+      byte bufferATQA[2];
+      byte bufferSize = sizeof(bufferATQA);
+      MFRC522::StatusCode status = mfrc.PICC_RequestA(bufferATQA, &bufferSize);
 
-// === RFID Manager ===
-class RFIDManager {
-private:
-  MFRC522 mfrc;
-  bool isCardPresent = false;
-  bool wasCardPresent = false;
-  unsigned long lastSeen = 0;
-  String UID = ""; 
-  StaticJsonDocument<200> doc;
-  SoftwareSerial &espSerial;
-public:
-  
-  RFIDManager(byte ssPin, byte rstPin, SoftwareSerial &esp) : mfrc(ssPin, rstPin),espSerial(esp) {}
-
-  void begin() {
-    mfrc.PCD_Init();
-  }
-
-  void update() {
-    byte bufferATQA[2];
-    byte bufferSize = sizeof(bufferATQA);
-    //카드가 리더 범위에 들어왔는지 판단
-    MFRC522::StatusCode status = mfrc.PICC_RequestA(bufferATQA, &bufferSize);
-    //카드가 통신되면 lastSeen 시간 저장, 카드 존재 true 저장.
-    if (status == MFRC522::STATUS_OK) 
-    {
-      lastSeen = millis();
-      isCardPresent = true;
-    } 
-    //카드가 통신안되면
-    else 
-    { //카드가 존재했었고, 없어진 시간이 debounce 보다 크면 카드 존재 false저장.
-      if (isCardPresent && millis() - lastSeen > RFID_DEBOUNCE_TIME) 
+      if (status == MFRC522::STATUS_OK)
       {
-        isCardPresent = false;
+        lastSeen = millis();
+        isCardPresent = true;
       }
-    }
-    //카드가 처음 통신되었으면 UID 읽어서 Serial로 전송
-    if (isCardPresent && !wasCardPresent) {
-      if (mfrc.PICC_ReadCardSerial()) {
-        UID = getUIDString();  // UID 멤버 변수에 저장
-        doc["rfid_tag"] = UID;
-        Serial.println("card detected");
-        serializeJson(doc,espSerial);
-        serializeJson(doc,Serial);
-        Serial.println("");
-        mfrc.PICC_HaltA();        // ★ 카드 통신 종료
-        mfrc.PCD_StopCrypto1();   // ★ 암호화 종료
-      } else {
-        Serial.println("card detected, but UID read failed");
-        UID = "";
-      }
-      wasCardPresent = true;
-    }
-    //카드가 처음 통신 안되면 UID 초기화
-    if (!isCardPresent && wasCardPresent) {
-      Serial.println("card removed");
-      wasCardPresent = false;
-      UID = "";
-    }
-  }
-  //UID 카드에서 읽어서 저장
-  String getUIDString() {
-    String uid = "";
-    for (byte i = 0; i < mfrc.uid.size; i++) {
-      if (mfrc.uid.uidByte[i] < 0x10) uid += "0";
-      uid += String(mfrc.uid.uidByte[i], HEX);
-    }
-    uid.toUpperCase();
-    return uid;
-  }
-};
-
-// === ESP32 Manager ===
-class ESPManager
-{
-  private:
-    SoftwareSerial &esp;
-
-  public:
-    ESPManager(SoftwareSerial &serial) : esp(serial)
-    {
-    }
-
-    void sendUID(const String &uid)
-    {
-      esp.println(uid);
-    }
-
-    String getResponse()
-    {
-      if (esp.available())
+      else
       {
-        String res = esp.readStringUntil('\n');
-        res.trim();
-        return res;
+        if (isCardPresent && millis() - lastSeen > RFID_DEBOUNCE_TIME)
+        {
+          isCardPresent = false;
+        }
       }
-      return "";
+
+      if (isCardPresent && !wasCardPresent)
+      {
+        if (mfrc.PICC_ReadCardSerial() && mfrc.uid.size == 4)
+        {
+          for (byte i = 0; i < 4; i++)
+          {
+            UID[i] = mfrc.uid.uidByte[i];
+          }
+          newCardDetected = true;
+          //Serial.println("card detected");
+          mfrc.PICC_HaltA();
+          mfrc.PCD_StopCrypto1();
+        }
+        else
+        {
+          //Serial.println("card detected, but UID read failed");
+          memset(UID, 0, 4);
+        }
+        wasCardPresent = true;
+      }
+
+      if (!isCardPresent && wasCardPresent)
+      {
+        //Serial.println("card removed");
+        wasCardPresent = false;
+        memset(UID, 0, 4);
+      }
+    }
+
+    const byte* getUIDBytes() const
+    {
+      return UID;
+    }
+
+    bool isNewCardDetected() const
+    {
+      return newCardDetected;
     }
 };
-// === Alcohol Sensor Manager ===
+
+//=== Alcohol Sensor Manager ===
 class AlcoholManager
 {
   private:
@@ -324,13 +260,12 @@ class DriveManager
 class SystemManager
 {
   private:
-    LCDManager &lcd;
     AlcoholManager &alcohol;
     DriveManager &drive;
     DriveState currentState = WAIT_FOR_AUTH;
   public:
-    SystemManager(LCDManager &l, AlcoholManager &a, DriveManager &d)
-      : lcd(l), alcohol(a), drive(d)
+    SystemManager(AlcoholManager &a, DriveManager &d)
+      : alcohol(a), drive(d)
     {
     }
 
@@ -339,13 +274,13 @@ class SystemManager
       if (cmd == "PASS" && currentState == WAIT_FOR_AUTH)
       {
         Serial.println("MEASURING");
-        lcd.printLine(0, "MEASURING");
+
         currentState = MEASURING;
       }
       else if (cmd == "FAIL")
       {
         Serial.println("ACCESS DENIED");
-        lcd.printLine(0, "ACCESS DENIED");
+
         drive.stop();
         currentState = ACCESS_DENIED;
       }
@@ -359,7 +294,7 @@ class SystemManager
         {
           if (alcohol.isSwitchPressed())
           {
-            lcd.printLine(0, "Measuring...");
+
             Serial.println("Measuring Start");
             alcohol.startMeasuring();
           }
@@ -373,13 +308,13 @@ class SystemManager
           {
             if (isSafe)
             {
-              lcd.printLine(0, "ACCESS GRANTED");
+
               Serial.println("ACCESS GRANTED");
               currentState = ACCESS_GRANTED;
             }
             else
             {
-              lcd.printLine(0, "ACCESS DENIED");
+
               Serial.println("ACCESS DENIED");
               drive.stop();
               currentState = ACCESS_DENIED;
@@ -394,7 +329,6 @@ class SystemManager
     {
       if (currentState != ACCESS_GRANTED)
       {
-        lcd.printLine(0, "CMD BLOCKED");
         return;
       }
 
@@ -409,53 +343,47 @@ class SystemManager
       else if (cmd == "정지")
         drive.stop();
       else
-        lcd.printLine(1, "BT: UNKNOWN");
+      {
+        //Serial.println("cmd error");
+      }
+        
     }
 };
 
-LCDManager lcdManager(LCD_RS_PIN,LCD_EN_PIN,LCD_D4_PIN,LCD_D5_PIN,LCD_D6_PIN,LCD_D7_PIN);
-SoftwareSerial espSerial(ESP_RX_PIN, ESP_TX_PIN);
-ESPManager espManager(espSerial);
-RFIDManager rfidManager(RFID_SS_PIN, RFID_RST_PIN, espSerial);
+RFIDManager rfidManager(RFID_SS_PIN, RFID_RST_PIN);
 DriveManager driveManager;
 AlcoholManager alcoholManager;
-SystemManager systemManager(lcdManager, alcoholManager, driveManager);
+SystemManager systemManager(alcoholManager, driveManager);
 
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(BAUD_RATE);
-  espSerial.begin(ESP_BAUD_RATE);
   SPI.begin();
 
   driveManager.begin();
-  lcdManager.begin();
   rfidManager.begin();
   alcoholManager.begin(); 
 
-  Serial.println("Initialized");
+  //Serial.println("Initialized");
 
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
   rfidManager.update();
-  String espResponse = espManager.getResponse();
-  if(espResponse != "")
-  {
-    systemManager.handleResponse(espResponse);
-  }
   systemManager.update();
 
   
-  if (flag == true) { // flag로 onetime 송신
-    flag = false;
-
+  if (rfidManager.isNewCardDetected())
+  {
     char send_buffer[VF_PACKET_SIZE];
     send_buffer[0] = PACKET_HEADER;
-    memcpy(send_buffer + 1, CMD_VERIFY, 2);
-    memcpy(send_buffer + 3, UID, 4);
+    memcpy(send_buffer + 1, CMD_VERIFY, 2);     // 명령어 2바이트
+    memcpy(send_buffer + 3, rfidManager.getUIDBytes(), 4); // UID 4바이트
+    send_buffer[7] = '\n'; // 패킷 끝 표시 (선택 사항)
 
-    Serial.write((const uint8_t*)send_buffer, VF_PACKET_SIZE);
+    Serial.write((const uint8_t *)send_buffer, VF_PACKET_SIZE);
+    //Serial.println("UID sent to host.");
   }
   
 }
