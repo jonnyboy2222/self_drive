@@ -5,16 +5,6 @@ from PyQt6 import uic
 from PyQt6 import QtCore, QtGui
 from PyQt6.QtCore import *
 
-import mysql.connector
-
-# local = mysql.connector.connect(
-#     host = 'localhost',
-#     port = '3306',
-#     user = 'root',
-#     database = 'leebase',
-#     password = '0303'
-# )
-
 MAIN_UI = "/home/lee/project/self_drive/vehicle_gui/main.ui"
 STATUS_UI = "/home/lee/project/self_drive/vehicle_gui/status.ui"
 INFO_UI = "/home/lee/project/self_drive/vehicle_gui/info.ui"

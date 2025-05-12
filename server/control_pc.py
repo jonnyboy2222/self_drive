@@ -1,3 +1,10 @@
+import sys
+from PyQt6.QtWidgets import *
+from PyQt6.QtGui import *
+from PyQt6 import uic
+from PyQt6 import QtCore, QtGui
+from PyQt6.QtCore import *
+
 # --- PC1: Serial to PC2 with DB insert and VF response handling ---
 
 import serial
@@ -9,6 +16,7 @@ from dbutils.pooled_db import PooledDB
 import threading
 
 SERIAL_PORT = '/dev/ttyACM0'
+# SERIAL_PORT = '/dev/ttyACM1'
 BAUD_RATE = 9600
 TIMEOUT_S = 1.0
 
@@ -45,6 +53,16 @@ def insert_to_db(shock, temp):
         print(f"[DB ERROR] {e}")
     finally:
         conn.close()
+
+# 센서 데이터를 읽고, DB에 저장하는 메서드
+def get_sensor_data(ser):
+    packet = read_aligned_packet(ser)
+    command = packet[1:3].decode("ascii", errors="replace")
+    if command == "DB":
+        shock = struct.unpack('<f', packet[7:11])[0]
+        temp = struct.unpack('<f', packet[11:15])[0]
+        return shock, temp
+    return None, None
 
 def read_aligned_packet(ser):
     while True:
@@ -116,5 +134,149 @@ def main():
     finally:
         print("[PC1] Terminated.")
 
+
+MAIN_UI = "/home/lee/project/self_drive/vehicle_gui/main.ui"
+STATUS_UI = "/home/lee/project/self_drive/vehicle_gui/status.ui"
+INFO_UI = "/home/lee/project/self_drive/vehicle_gui/info.ui"
+
+main_window = uic.loadUiType(MAIN_UI)[0]
+status_window = uic.loadUiType(STATUS_UI)[0]
+info_window = uic.loadUiType(INFO_UI)[0]
+
+class MainWindow(QWidget, main_window):
+    def __init__(self):
+        super().__init__()
+        self.setupUi(self)
+
+        self.setWindowTitle("Main")
+
+        self.power_on = False
+
+        # 타이머
+        self.clock_timer = QTimer()
+        self.clock_timer.timeout.connect(self.update_time)
+        self.clock_timer.start(1000)
+        self.update_time()
+
+        self.sensor_timer = QTimer()
+        # self.sensor_timer.timeout.connect(self.update_sensor)
+
+        # 이벤트 연결
+        self.power_btn.clicked.connect(self.toggle_power)
+        self.status_btn.clicked.connect(self.show_status)
+        self.info_btn.clicked.connect(self.show_info)
+
+        # 비활성화
+        self.status_btn.setEnabled(False)
+        self.info_btn.setEnabled(False)
+
+    def update_time(self):
+        self.time_edit.setText(QTime.currentTime().toString("hh:mm:ss"))
+
+    def toggle_power(self):
+        self.power_on = not self.power_on
+        if self.power_on:
+            self.power_btn.setText("OFF")
+            self.status_btn.setEnabled(True)
+            self.info_btn.setEnabled(True)
+            self.sensor_timer.start(1000)
+        else:
+            self.power_btn.setText("ON")
+            self.status_btn.setEnabled(False)
+            self.info_btn.setEnabled(False)
+            self.sensor_timer.stop()
+
+    def show_status(self):
+        self.status_window = StatusWindow(self)
+        self.status_window.show()
+        self.hide()
+
+    def show_info(self):
+        self.info_window = InfoWindow(self)
+        self.info_window.show()
+        self.hide()
+
+
+class StatusWindow(QWidget, status_window):
+    def __init__(self, parent):
+        super().__init__()
+        self.setupUi(self)
+        self.setWindowTitle("Status")
+        self.parent = parent
+
+        self.sensor_thread = SensorThread()
+        self.sensor_thread.new_data.connect(self.update_display)
+        self.sensor_thread.start()
+
+        self.main_btn.clicked.connect(self.return_main)
+
+    def update_display(self, shock, temp):
+        self.temp_edit.setText(f"{temp: .1f}°C")
+        self.shock_edit.setText(f"{shock} times")
+        self.speed_edit.setText("속도km/h")
+
+    def return_main(self):
+        self.parent.show()
+        self.close()
+
+
+class InfoWindow(QWidget,info_window):
+    def __init__(self, parent):
+        super().__init__()
+        self.setupUi(self)
+        self.setWindowTitle("Info")
+        self.parent = parent
+
+        self.load_driver_data()
+        self.main_btn.clicked.connect(self.return_main)
+
+    def load_driver_data(self):
+        try:
+            conn = get_db_connection()
+            with conn.cursor() as cur:
+                cur.execute("SELECT AVG(shock) as Shock, AVG(temperature) as Temp FROM sensor_data ")
+                result = cur.fetchall()
+
+                for row in result:
+                    self.info_edit.append(f"Temp: {row[0]} \n Shock: {row[1]}")
+
+        except Exception as e:
+            print(f"[DB ERROR] {e}")
+        finally:
+            conn.close()
+
+    def return_main(self):
+        self.parent.show()
+        self.close()
+
+class SensorThread(QThread):
+    new_data = pyqtSignal(float, float)  # shock, temp
+
+    def __init__(self,ser):
+        super().__init__()
+        self.ser = ser
+        self.shock = None
+        self.temp = None
+
+    def run(self):
+        while True:
+            shock, temp = get_sensor_data(self.ser)
+            if shock is not None and temp is not None:
+                insert_to_db(shock, temp)
+                self.new_data.emit(shock, temp)  # 시그널 발생
+            time.sleep(1)
+
 if __name__ == "__main__":
-    main()
+    app = QApplication(sys.argv)
+
+    ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=TIMEOUT_S)
+
+    window = MainWindow()
+    window.show()
+
+    sensor_thread = threading.Thread(target=main, daemon=True)
+    sensor_thread.start()
+
+
+    sys.exit(app.exec())
+    
