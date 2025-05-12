@@ -2,7 +2,7 @@ import sys
 import serial
 from PyQt6.QtWidgets import QApplication, QWidget
 from PyQt6.QtCore import Qt, QTimer
-
+import time
 # ser = serial.Serial('/dev/rfcomm0', 9600, timeout=1)
 
 class RCController(QWidget):
@@ -13,14 +13,15 @@ class RCController(QWidget):
 
         self.ser = None
         try:
-            self.ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
+            self.ser = serial.Serial('/dev/ttyACM1', 9600, timeout=1)
             print("Successfully connected to /dev/ttyACM0")
+            time.sleep(1)
         except serial.SerialException as e:
             print(f"Error opening serial port /dev/ttyACM0: {e}. Please check the connection and permissions.")
 
         self.keys_pressed = set()
-        self.servo_angle = 90
-        self.servo_dir = 0
+        self.speed = 150
+        self.speed_dir = 0
 
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_command)
@@ -41,24 +42,33 @@ class RCController(QWidget):
             # 모터 제어 (전진/후진)
             if Qt.Key.Key_W in self.keys_pressed:
                 self.ser.write(b'MF\n')
+                print(self.ser.readline(), 'MF')
             elif Qt.Key.Key_S in self.keys_pressed:
                 self.ser.write(b'MB\n')
+                print(self.ser.readline(), 'MB')
+            elif Qt.Key.Key_A in self.keys_pressed:
+                self.ser.write(b'TL\n')
+                print(self.ser.readline(), 'TL')
+            elif Qt.Key.Key_D in self.keys_pressed:
+                self.ser.write(b'TR\n')
+                print(self.ser.readline(), 'TR')
             else:
                 self.ser.write(b'MS\n')
+                print(self.ser.readline(), 'MS')
 
-            # 서보 조향 제어
-            if Qt.Key.Key_A in self.keys_pressed and Qt.Key.Key_D not in self.keys_pressed:
-                self.servo_dir = -1
-            elif Qt.Key.Key_D in self.keys_pressed and Qt.Key.Key_A not in self.keys_pressed:
-                self.servo_dir = 1
+            # 속도 제어
+            if Qt.Key.Key_Q in self.keys_pressed and Qt.Key.Key_E not in self.keys_pressed:
+                self.speed_dir = -1
+            elif Qt.Key.Key_E in self.keys_pressed and Qt.Key.Key_Q not in self.keys_pressed:
+                self.speed_dir = 1
             else:
-                self.servo_dir = 0
+                self.speed_dir = 0
 
-            if self.servo_dir != 0:
-                self.servo_angle += self.servo_dir * 3
-                self.servo_angle = max(45, min(135, self.servo_angle))
-                command = f"X{self.servo_angle}\n"
+            if self.speed_dir != 0:
+                self.speed += self.speed_dir * 10
+                command = f"X{self.speed}\n"
                 self.ser.write(command.encode())
+                print(self.speed)
         except serial.SerialException as e:
             print(f"Serial write error on /dev/ttyACM0: {e}. Connection may be lost.")
             if self.ser and self.ser.is_open:
