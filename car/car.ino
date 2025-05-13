@@ -5,29 +5,31 @@
 #include "AmbientLightManager.h"
 #include "ObstacleManager.h"
 #include "TempManager.h"
-
+#include "ShockManager.h"
 #define BAUD_RATE 9600
 
-// RFID
-#define RFID_RST_PIN 9
-#define RFID_SS_PIN 10
+// RFID (SPI: 50=MISO, 51=MOSI, 52=SCK)
+#define RFID_SS_PIN     53   // SDA
+#define RFID_RST_PIN    49
 
-// Alcohol
-#define ALCOHOL_SENSOR_PIN A2
-#define SWITCH_PIN 8
+// Alcohol Sensor
+#define ALCOHOL_SENSOR_PIN  A8
+#define SWITCH_PIN          48
 
 // Ambient Light
-#define LIGHT_SENSOR_PIN A3
-#define LED_PIN 12
-
-// Obstacle (Ultrasonic + Buzzer)
-#define TRIG_PIN 28
-#define ECHO_PIN 29
-#define BUZZER_PIN 11
+#define LIGHT_SENSOR_PIN    A9
+#define LED_PIN             47
 
 // Temperature
-#define TEMP_SENSOR_PIN A1
+#define TEMP_SENSOR_PIN     A10
 
+// Ultrasonic & Buzzer
+#define TRIG_PIN            46
+#define ECHO_PIN            45
+#define BUZZER_PIN          44
+
+//shock
+#define SHOCK_SENSOR_PIN 43
 // Manager Instances
 RFIDManager rfidManager(RFID_SS_PIN, RFID_RST_PIN);
 AlcoholManager alcoholManager(ALCOHOL_SENSOR_PIN, SWITCH_PIN);
@@ -36,7 +38,11 @@ AuthManager authManager(rfidManager, alcoholManager);
 AmbientLightManager ambientLightManager(LIGHT_SENSOR_PIN, LED_PIN);
 ObstacleManager obstacleManager(TRIG_PIN, ECHO_PIN, BUZZER_PIN);
 TempManager tempManager(TEMP_SENSOR_PIN);
+ShockManager shockManager(SHOCK_SENSOR_PIN);
 
+unsigned long lastSendTime =0;
+unsigned long currentTime;
+unsigned long SendInterval = 1000;
 void setup() {
   Serial.begin(BAUD_RATE);
   SPI.begin();
@@ -45,14 +51,25 @@ void setup() {
   ambientLightManager.begin();
   obstacleManager.begin();
   tempManager.begin();
+  shockManager.begin();
 }
 
 void loop() {
+  currentTime = millis();
   authManager.update();
   ambientLightManager.update();
   obstacleManager.update();
   tempManager.update();
-
+  shockManager.update();
+  
+  if ( currentTime - lastSendTime >= SendInterval)
+  {
+    lastSendTime = currentTime;
+    Serial.println(ambientLightManager.getLightState());
+    Serial.println(obstacleManager.getAvgDistance());
+    Serial.println(tempManager.getCurrentTemperature());
+    Serial.println(shockManager.getLatestAverageShock());
+  }
   // 수신 처리
   static int idx = 0;
   static char recv_buffer[4];
