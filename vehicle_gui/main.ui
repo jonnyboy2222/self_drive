@@ -37,14 +37,17 @@
     <set>Qt::AlignCenter</set>
    </property>
   </widget>
-  <widget class="QTextEdit" name="textEdit">
+  <widget class="QTextEdit" name="main_edit">
    <property name="geometry">
     <rect>
      <x>80</x>
-     <y>250</y>
+     <y>260</y>
      <width>421</width>
      <height>371</height>
     </rect>
+   </property>
+   <property name="readOnly">
+    <bool>true</bool>
    </property>
   </widget>
   <widget class="QPushButton" name="power_btn">
@@ -107,6 +110,9 @@
      <width>341</width>
      <height>26</height>
     </rect>
+   </property>
+   <property name="readOnly">
+    <bool>true</bool>
    </property>
   </widget>
  </widget>
