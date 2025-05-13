@@ -43,6 +43,26 @@ ShockManager shockManager(SHOCK_SENSOR_PIN);
 unsigned long lastSendTime =0;
 unsigned long currentTime;
 unsigned long SendInterval = 1000;
+
+static int idx = 0;
+static char recv_buffer[4];
+
+static int idx2 = 0;
+static char recv_buffer2[3];
+
+
+const byte PACKET_HEADER = 0xAA;
+
+const char CMD_STORE_DATA[] = "DB";
+const int DB_PACKET_SIZE = 1 + 2 + 4 + sizeof(float) * 2; // 1(header) + 2(command) + 4(uid) + 8(floats)
+
+const char CMD_LIGHT_STATE[] = "LS";
+const int LS_PACKET_SIZE = 1 + 2 + 1; // 1(header) + 2(command) + 1(boolean)
+
+bool lightState;
+float ultrasonic;
+
+
 void setup() {
   Serial.begin(BAUD_RATE);
   SPI.begin();
@@ -65,14 +85,33 @@ void loop() {
   if ( currentTime - lastSendTime >= SendInterval)
   {
     lastSendTime = currentTime;
-    Serial.println(ambientLightManager.getLightState());
-    Serial.println(obstacleManager.getAvgDistance());
-    Serial.println(tempManager.getCurrentTemperature());
-    Serial.println(shockManager.getLatestAverageShock());
+
+    char send_buffer_db[DB_PACKET_SIZE];
+
+    send_buffer[0] = PACKET_HEADER;
+    memcpy(send_buffer + 1, CMD_STORE_DATA, 2);
+    memcpy(send_buffer + 3, UID, 4);
+    memcpy(send_buffer + 7, &shockManager.getLatestAverageShock(), sizeof(float));
+    memcpy(send_buffer + 11, &tempManager.getCurrentTemperature(), sizeof(float));
+
+    Serial.write((const uint8_t*)send_buffer, DB_PACKET_SIZE);
   }
   // 수신 처리
-  static int idx = 0;
-  static char recv_buffer[4];
+
+  lightState = ambientLightManager.getLightState();
+  if (lightState == true) {
+    char send_buffer_ls[LS_PACKET_SIZE];
+
+    send_buffer[0] = PACKET_HEADER;
+    memcpy(send_buffer + 1, CMD_LIGHT_STATE, 2);
+    memcpy(send_buffer + 3, &lightState, 1);
+
+    Serial.write((const uint8_t*)send_buffer, LS_PACKET_SIZE);
+  }
+
+  ultrasonic = obstacleManager.getAvgDistance();
+  if ()
+
 
   while (Serial.available()) {
     char byte = Serial.read();
@@ -88,6 +127,10 @@ void loop() {
         } else if ((uint8_t)recv_buffer[3] == 0) {
           authManager.handleResponse(false);
         }
+      } else if (recv_buffer[1] == 'M' && recv_buffer[2] == 'B') {
+
+      } else if (recv_buffer[1] == 'S' && recv_buffer[2] == 'T') {
+        
       }
       idx = 0;
     }
