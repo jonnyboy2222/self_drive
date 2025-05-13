@@ -8,7 +8,7 @@ class AmbientLightManager {
     AmbientLightManager(uint8_t lightPin, uint8_t ledPin);
     void begin();
     void update();
-
+    bool getLightState();
   private:
     uint8_t lightSensorPin;
     uint8_t ledPin;
@@ -24,6 +24,8 @@ class AmbientLightManager {
 
     unsigned long now_light_measuretime;
     unsigned long pre_light_measuretime;
+
+    bool lightOn = false;
 };
 
 #endif

@@ -10,7 +10,8 @@ class ObstacleManager
     void begin();
     void update();
     void setReversing(bool state);
-
+    float getAvgDistance();
+    
   private:
     uint8_t trigPin;
     uint8_t echoPin;

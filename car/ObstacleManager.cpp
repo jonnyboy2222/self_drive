@@ -99,3 +99,7 @@ void ObstacleManager::update()
   }
 }
 
+float ObstacleManager::getAvgDistance()
+{
+  return avg_distance;
+}

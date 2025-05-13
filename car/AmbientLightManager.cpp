@@ -35,16 +35,21 @@ void AmbientLightManager::update() {
 
     if (light_sample_index == 0) {
       avg_light = total_lights / LIGHTSAMPLESIZE;
-      Serial.print("avg light: ");
-      Serial.println(avg_light);
     }
 
     if (avg_light > LIGHT_THRESHOLD) {
       digitalWrite(ledPin, HIGH);
+      lightOn = true;
     } else {
       digitalWrite(ledPin, LOW);
+      lightOn = false;
     }
 
     pre_light_measuretime = now_light_measuretime;
   }
+}
+
+bool AmbientLightManager::getLightState()
+{
+  return lightOn;
 }

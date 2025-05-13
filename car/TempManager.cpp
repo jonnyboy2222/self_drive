@@ -22,9 +22,6 @@ void TempManager::update() {
     if (temperature > TEMP_THRESHOLD) {
       overtemperature = temperature;
     }
-
-    Serial.print("Temperature: ");
-    Serial.println(temperature);
   }
 }
 
