@@ -7,6 +7,8 @@ from PyQt6 import QtCore, QtGui
 from PyQt6.QtCore import *
 import time
 
+import queue
+
 # --- PC1: Serial to PC2 with DB insert and VF response handling ---
 
 import serial
@@ -28,6 +30,9 @@ PACKET_HEADER = 0xAA
 DB_PACKET_SIZE = 15 # 1(header) + 2(command) + 4(uid) + 8(floats)
 VF_PACKET_SIZE = 7
 VF_RESPONSE_SIZE = 4 # 1(header) + 2(command) + 1(VF_RESP) + 2 (padding)
+
+temp_queue = queue.Queue()
+shock_queue = queue.Queue()
 
 # Database connection pool
 db_pool = PooledDB(
@@ -127,6 +132,8 @@ def main():
                     shock = struct.unpack('<f', packet[7:11])[0]
                     temp = struct.unpack('<f', packet[11:15])[0]
                     insert_to_db(shock, temp)
+                    shock_queue.put(f"{shock:.2f}")
+                    temp_queue.put(f"{temp:.2f}")
                     print(f"[PC1] Stored DB: Shock={shock:.2f}, Temp={temp:.2f}")
 
                 sock.sendall(packet)
@@ -173,11 +180,12 @@ class RCController(QWidget):
         self.timer.timeout.connect(self.update_command)
         self.timer.start(50)  # 20 FPS
 
+        self.auth = False
+
     def keyPressEvent(self, event):
         self.keys_pressed.add(event.key())
 
     def keyReleaseEvent(self, event):
-
         self.keys_pressed.discard(event.key())
 
     def update_command(self):
@@ -185,36 +193,37 @@ class RCController(QWidget):
             print("Serial port /dev/ttyACM1 not available. Cannot send command.")
             return 
         try:
-            # 모터 제어 (전진/후진)
-            if Qt.Key.Key_W in self.keys_pressed:
-                self.ser.write(b'MF\n')
-                print(self.ser.readline(), 'MF')
-            elif Qt.Key.Key_S in self.keys_pressed:
-                self.ser.write(b'MB\n')
-                print(self.ser.readline(), 'MB')
-            elif Qt.Key.Key_A in self.keys_pressed:
-                self.ser.write(b'TL\n')
-                print(self.ser.readline(), 'TL')
-            elif Qt.Key.Key_D in self.keys_pressed:
-                self.ser.write(b'TR\n')
-                print(self.ser.readline(), 'TR')
-            else:
-                self.ser.write(b'MS\n')
-                print(self.ser.readline(), 'MS')
+            if self.auth == True:
+                # 모터 제어 (전진/후진)
+                if Qt.Key.Key_W in self.keys_pressed:
+                    self.ser.write(b'MF\n')
+                    print(self.ser.readline(), 'MF')
+                elif Qt.Key.Key_S in self.keys_pressed:
+                    self.ser.write(b'MB\n')
+                    print(self.ser.readline(), 'MB')
+                elif Qt.Key.Key_A in self.keys_pressed:
+                    self.ser.write(b'TL\n')
+                    print(self.ser.readline(), 'TL')
+                elif Qt.Key.Key_D in self.keys_pressed:
+                    self.ser.write(b'TR\n')
+                    print(self.ser.readline(), 'TR')
+                else:
+                    self.ser.write(b'MS\n')
+                    print(self.ser.readline(), 'MS')
 
-            # 속도 제어
-            if Qt.Key.Key_Q in self.keys_pressed and Qt.Key.Key_E not in self.keys_pressed:
-                self.speed_dir = -1
-            elif Qt.Key.Key_E in self.keys_pressed and Qt.Key.Key_Q not in self.keys_pressed:
-                self.speed_dir = 1
-            else:
-                self.speed_dir = 0
+                # 속도 제어
+                if Qt.Key.Key_Q in self.keys_pressed and Qt.Key.Key_E not in self.keys_pressed:
+                    self.speed_dir = -1
+                elif Qt.Key.Key_E in self.keys_pressed and Qt.Key.Key_Q not in self.keys_pressed:
+                    self.speed_dir = 1
+                else:
+                    self.speed_dir = 0
 
-            if self.speed_dir != 0:
-                self.speed += self.speed_dir * 10
-                command = f"X{self.speed}\n"
-                self.ser.write(command.encode())
-                print(self.speed)
+                if self.speed_dir != 0:
+                    self.speed += self.speed_dir * 10
+                    command = f"X{self.speed}\n"
+                    self.ser.write(command.encode())
+                    print(self.speed)
         except serial.SerialException as e:
             print(f"Serial write error on /dev/ttyACM0: {e}. Connection may be lost.")
             if self.ser and self.ser.is_open:
@@ -231,6 +240,23 @@ class RCController(QWidget):
             self.ser.close()
         super().closeEvent(event)
 
+# class SensorWorker(QObject):
+#     data_updated = pyqtSignal(float, float, bool)
+
+#     def __init__(self):
+#         super().__init__()
+#         self._running = True
+
+#     def run(self):
+#         value = 0
+#         while self._running:
+#             value += 1
+#             self.data_updated.emit(value)
+#             time.sleep(1)
+
+#     def stop(self):
+#         self._running = False
+
 class MainWindow(QWidget, main_window):
     def __init__(self):
         super().__init__()
@@ -246,9 +272,6 @@ class MainWindow(QWidget, main_window):
         self.clock_timer.start(1000)
         self.update_time()
 
-        self.sensor_timer = QTimer()
-        # self.sensor_timer.timeout.connect(self.update_sensor)
-
         # 이벤트 연결
         self.power_btn.clicked.connect(self.toggle_power)
         self.status_btn.clicked.connect(self.show_status)
@@ -257,6 +280,13 @@ class MainWindow(QWidget, main_window):
         # 비활성화
         self.status_btn.setEnabled(False)
         self.info_btn.setEnabled(False)
+
+        # 데이터 들어있는 queue 주기적으로 체크
+        self.data_poll_timer = QTimer()
+        self.data_poll_timer.timeout.connect(self.poll_data_from_thread)
+        self.data_poll_timer.start(5000)
+
+        self.updateDisplay()
 
     def update_time(self):
         self.time_edit.setText(QTime.currentTime().toString("hh:mm:ss"))
@@ -284,6 +314,19 @@ class MainWindow(QWidget, main_window):
         self.info_window.show()
         self.hide()
 
+    def updateDisplay(self, message='Waiting for update'):
+        self.main_edit.setText(message)
+        QTimer.singleShot(3000, self.main_edit.clear)
+
+    def poll_data_from_thread(self):
+        try:
+            shock = shock_queue.get_nowait()
+            shock.get()
+            temp = temp.queue.get_nowait()
+            temp.get()
+            self.updateDisplay(f"{shock}times \n {temp}°C")
+        except queue.Empty:
+            pass
 
 class StatusWindow(QWidget, status_window):
     def __init__(self, parent):
@@ -292,11 +335,29 @@ class StatusWindow(QWidget, status_window):
         self.setWindowTitle("Status")
         self.parent = parent
 
-        self.temp_edit.setText("온도°C")
-        self.shock_edit.setText("충격")
-        self.speed_edit.setText("속도km/h")
+        # self.temp_edit.setText("--°C")
+        # self.shock_edit.setText("-- times")
+        self.updateStatus(0, 0)
+
+        # 데이터 들어있는 queue 주기적으로 체크
+        self.data_poll_timer2 = QTimer()
+        self.data_poll_timer2.timeout.connect(self.poll_data_from_thread)
+        self.data_poll_timer2.start(5000)
 
         self.main_btn.clicked.connect(self.return_main)
+
+    def updateStatus(self, temp, shock):
+        self.temp_edit.setText(f'{temp} °C')
+        self.shock_edit.setText(f'{shock} times')
+
+    def poll_data_from_thread(self):
+        try:
+            shock = shock_queue.get_nowait()
+            temp = temp.queue.get_nowait()
+            self.updateStatus(shock, temp)
+            shock_queue.empty()
+        except queue.Empty:
+            pass
 
     def return_main(self):
         self.parent.show()
@@ -310,21 +371,25 @@ class InfoWindow(QWidget,info_window):
         self.setWindowTitle("Info")
         self.parent = parent
 
-        self.driverText: QTextEdit = self.findChild(QTextEdit, "driverText")
-        self.backButton: QPushButton = self.findChild(QPushButton, "backButton")
-
         self.load_driver_data()
         self.main_btn.clicked.connect(self.return_main)
+
+        self.data_poll_timer3 = QTimer()
+        self.data_poll_timer3.timeout.connect(self.poll_data_from_thread)
+        self.data_poll_timer3.start(5000)
+
+        self.updateDisplay()
 
     def load_driver_data(self):
         try:
             conn = get_db_connection()
             with conn.cursor() as cur:
-                cur.execute("SELECT temperature, shock FROM sensor_data ORDER BY id DESC LIMIT 10")
+                cur.execute("SELECT temperature, shock FROM sensor_data ORDER BY id DESC LIMIT 1")
                 results = cur.fetchall()
                 self.driverText.clear()
                 for temp, shock in results:
-                    self.driverText.append(f"Temp: {temp} °C, Shock: {shock}")
+                    self.updateDisplay(f"Temp: {temp} °C, Shock: {shock} times")
+
         except Exception as e:
             print(f"[DB LOAD ERROR] {e}")
         finally:
@@ -334,9 +399,22 @@ class InfoWindow(QWidget,info_window):
         self.parent.show()
         self.close()
 
+    def updateDisplay(self, message='Drive Safe'):
+        self.info_edit.setText(message)
+        QTimer.singleShot(3000, self.info_edit.clear)
+
+    def poll_data_from_thread(self):
+        try:
+            shock = shock_queue.get_nowait()
+            temp = temp.queue.get_nowait()
+            self.updateDisplay(f"{shock}times \n {temp}°C")
+            shock_queue.empty()
+        except queue.Empty:
+            pass
+
 
 if __name__ == "__main__":
-    main()
+    threading.Thread(target=main, daemon=True).start()
 
     app = QApplication(sys.argv)
     window1 = RCController()
