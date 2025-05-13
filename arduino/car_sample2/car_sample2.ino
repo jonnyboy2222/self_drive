@@ -52,7 +52,7 @@ AlcoholManager alcoholM;
 ObstacleManager obstacleM;
 
 // === Shock Sensor Manager ===
-ShockManager shockM;
+ShockManager shockM(SHOCK_SENSOR_PIN);
 
 // === Temperature Manager ===
 TemperatureManager tempM;
@@ -61,7 +61,7 @@ TemperatureManager tempM;
 AmbientLightManager ambientM;
 
 // === RFID Manager ===
-RRFIDManager rfidM(RFID_SS_PIN, RFID_RST_PIN, espSerial);
+RRFIDManager rfidM(RFID_SS_PIN, RFID_RST_PIN);
 
 enum DriveState { WAIT_FOR_AUTH, MEASURING, ACCESS_GRANTED, ACCESS_DENIED };
 
@@ -179,13 +179,13 @@ class SystemManager
 };
 
 // === 인스턴스 생성 ===
-AlcoholManager alcoholManager;
-DriveManager driveManager;
-RFIDManager rfidManager(RFID_SS_PIN, RFID_RST_PIN, espSerial);
-ObstacleManager obstacleManager;
-ShockManager shockManager(SHOCK_SENSOR_PIN);
-TempManager tempManager;
-AmbientLightManager ambientLightManager;
+// AlcoholManager alcoholManager;
+// RFIDManager rfidManager(RFID_SS_PIN, RFID_RST_PIN, espSerial);
+// ObstacleManager obstacleManager;
+// ShockManager shockManager(SHOCK_SENSOR_PIN);
+// TempManager tempManager;
+// AmbientLightManager ambientLightManager;
+
 SystemManager systemManager(lcdManager, alcoholManager, driveManager, rfidManager,
                             espManager, bluetoothManager, obstacleManager,
                             shockManager, tempManager, ambientLightManager);
@@ -197,40 +197,32 @@ const unsigned long sensorBundleInterval = 1000; // Send every 1 second
 void setup() 
 {
   Serial.begin(BAUD_RATE);
-  // espSerial.begin(ESP_BAUD_RATE);
-  // btSerial.begin(BT_BAUD_RATE);
   SPI.begin();
-  lcdManager.begin();
-  driveManager.begin();
   rfidManager.begin();
-  obstacleManager.begin();
-  shockManager.begin();
-  tempManager.begin();
-  ambientLightManager.begin();
-
-  lcdManager.printLine(0, "System Ready");
-  lcdManager.printLine(1, "Scan RFID Card");
-  // currentState is already WAIT_FOR_AUTH by default
+  obstacleM.begin();
+  shockM.begin();
+  tempM.begin();
+  ambientM.begin();
 }
 
 
 void loop() 
 {
-  rfidManager.update();
-  shockManager.update(); // Handles shock detection and calculates average internally
-  tempManager.update(); // Handles temperature reading internally
-  float temp = tempManager.getTemp();
-  float overtemp = tempManager.getoverTemp();
-  ambientLightManager.update(); // Handles light sensor and headlights
+  rfidM.update();
+  shockM.update(); // Handles shock detection and calculates average internally
+  tempM.update(); // Handles temperature reading internally
+  float temp = tempM.getTemp();
+  float overtemp = tempM.getoverTemp();
+  ambientM.update(); // Handles light sensor and headlights
   
   // Handle incoming data from ESP32 (RFID verification results, YOLO commands)
-  String espData = espManager.getResponse();
+  String serData = Serial.read();
   if (espData != "") {
-    Serial.print("Received from ESP: "); Serial.println(espData);
-    if (espData == "PASS" || espData == "FAIL") {
-      systemManager.handleEspResponse(espData);
+    Serial.print("Received from Serial: "); Serial.println(serData);
+    if (serData == "PASS" || serData == "FAIL") {
+      systemManager.handleEspResponse(serData);
     } else {
-      Serial.println("Unknown command from ESP: " + espData);
+      Serial.println("Unknown command from Serial: " + serData);
     }
   }
 
