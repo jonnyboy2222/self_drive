@@ -1,9 +1,11 @@
 import sys
+import serial
 from PyQt6.QtWidgets import *
 from PyQt6.QtGui import *
 from PyQt6 import uic
 from PyQt6 import QtCore, QtGui
 from PyQt6.QtCore import *
+import time
 
 # --- PC1: Serial to PC2 with DB insert and VF response handling ---
 
@@ -16,17 +18,16 @@ from dbutils.pooled_db import PooledDB
 import threading
 
 SERIAL_PORT = '/dev/ttyACM0'
-# SERIAL_PORT = '/dev/ttyACM1'
 BAUD_RATE = 9600
 TIMEOUT_S = 1.0
 
-TCP_SERVER_IP = '192.168.0.42'
+TCP_SERVER_IP = '192.168.2.120'
 TCP_SERVER_PORT = 12345
 
 PACKET_HEADER = 0xAA
 DB_PACKET_SIZE = 15 # 1(header) + 2(command) + 4(uid) + 8(floats)
 VF_PACKET_SIZE = 7
-VF_RESPONSE_SIZE = 6 # 1(header) + 2(command) + 1(VF_RESP) + 2 (padding)
+VF_RESPONSE_SIZE = 4 # 1(header) + 2(command) + 1(VF_RESP) + 2 (padding)
 
 # Database connection pool
 db_pool = PooledDB(
@@ -64,14 +65,30 @@ def read_aligned_packet(ser):
             if len(cmd_bytes) < 2:
                 continue
             command = cmd_bytes.decode("ascii", errors="replace")
-            if command == "DB": # Database : read
+            if command == "DB":
                 rest = ser.read(DB_PACKET_SIZE - 3)
                 if len(rest) == DB_PACKET_SIZE - 3:
-                    return byte + cmd_bytes + rest
-            elif command == "VF": # verification : UID check
-                rest = ser.read(VF_PACKET_SIZE - 3)
-                if len(rest) == VF_PACKET_SIZE - 3:
-                    return byte + cmd_bytes + rest
+                    packet = byte + cmd_bytes + rest
+                    print(f"[RECV] DB Packet: {packet.hex().upper()}")
+                    return packet
+            elif command == "VF":
+                # 먼저 1바이트를 읽어 응답인지 요청인지 판단
+                lookahead = ser.read(1)
+                if not lookahead:
+                    continue
+
+                # 응답이면 (1바이트 추가만 있음 → 총 4바이트)
+                if ser.in_waiting == 0:
+                    packet = byte + cmd_bytes + lookahead
+                    print(f"[RECV] VF Response: {packet.hex().upper()}")
+                    return packet
+
+                # 아니면 요청 (나머지 3바이트 추가로 읽기 → 총 7바이트)
+                rest = ser.read(3)
+                if len(rest) == 3:
+                    packet = byte + cmd_bytes + lookahead + rest
+                    print(f"[RECV] VF Request: {packet.hex().upper()}")
+                    return packet
         else:
             continue
 
@@ -124,6 +141,7 @@ def main():
     finally:
         print("[PC1] Terminated.")
 
+# GUI ---------------------
 
 MAIN_UI = "/home/lee/project/self_drive/vehicle_gui/main.ui"
 STATUS_UI = "/home/lee/project/self_drive/vehicle_gui/status.ui"
@@ -132,6 +150,86 @@ INFO_UI = "/home/lee/project/self_drive/vehicle_gui/info.ui"
 main_window = uic.loadUiType(MAIN_UI)[0]
 status_window = uic.loadUiType(STATUS_UI)[0]
 info_window = uic.loadUiType(INFO_UI)[0]
+
+class RCController(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("RC카 제어기")
+        self.setFixedSize(200, 200)
+
+        self.ser = None
+        try:
+            self.ser = serial.Serial('/dev/ttyACM1', 9600, timeout=1)
+            print("Successfully connected to /dev/ttyACM1")
+            time.sleep(1)
+        except serial.SerialException as e:
+            print(f"Error opening serial port /dev/ttyACM1: {e}. Please check the connection and permissions.")
+
+        self.keys_pressed = set()
+        self.speed = 150
+        self.speed_dir = 0
+
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update_command)
+        self.timer.start(50)  # 20 FPS
+
+    def keyPressEvent(self, event):
+        self.keys_pressed.add(event.key())
+
+    def keyReleaseEvent(self, event):
+
+        self.keys_pressed.discard(event.key())
+
+    def update_command(self):
+        if not self.ser or not self.ser.is_open:
+            print("Serial port /dev/ttyACM1 not available. Cannot send command.")
+            return 
+        try:
+            # 모터 제어 (전진/후진)
+            if Qt.Key.Key_W in self.keys_pressed:
+                self.ser.write(b'MF\n')
+                print(self.ser.readline(), 'MF')
+            elif Qt.Key.Key_S in self.keys_pressed:
+                self.ser.write(b'MB\n')
+                print(self.ser.readline(), 'MB')
+            elif Qt.Key.Key_A in self.keys_pressed:
+                self.ser.write(b'TL\n')
+                print(self.ser.readline(), 'TL')
+            elif Qt.Key.Key_D in self.keys_pressed:
+                self.ser.write(b'TR\n')
+                print(self.ser.readline(), 'TR')
+            else:
+                self.ser.write(b'MS\n')
+                print(self.ser.readline(), 'MS')
+
+            # 속도 제어
+            if Qt.Key.Key_Q in self.keys_pressed and Qt.Key.Key_E not in self.keys_pressed:
+                self.speed_dir = -1
+            elif Qt.Key.Key_E in self.keys_pressed and Qt.Key.Key_Q not in self.keys_pressed:
+                self.speed_dir = 1
+            else:
+                self.speed_dir = 0
+
+            if self.speed_dir != 0:
+                self.speed += self.speed_dir * 10
+                command = f"X{self.speed}\n"
+                self.ser.write(command.encode())
+                print(self.speed)
+        except serial.SerialException as e:
+            print(f"Serial write error on /dev/ttyACM0: {e}. Connection may be lost.")
+            if self.ser and self.ser.is_open:
+                self.ser.close() 
+
+    def closeEvent(self, event):
+        """Properly close the serial port when the application exits."""
+        if self.ser and self.ser.is_open:
+            print("Closing serial port /dev/ttyACM1.")
+            try:
+                self.ser.write(b'S\n') 
+            except serial.SerialException:
+                pass 
+            self.ser.close()
+        super().closeEvent(event)
 
 class MainWindow(QWidget, main_window):
     def __init__(self):
@@ -186,9 +284,6 @@ class MainWindow(QWidget, main_window):
         self.info_window.show()
         self.hide()
 
-    # def alertDisplay(self):
-
-
 
 class StatusWindow(QWidget, status_window):
     def __init__(self, parent):
@@ -197,16 +292,11 @@ class StatusWindow(QWidget, status_window):
         self.setWindowTitle("Status")
         self.parent = parent
 
-        self.sensor_thread = SensorThread()
-        self.sensor_thread.new_data.connect(self.update_display)
-        self.sensor_thread.start()
+        self.temp_edit.setText("온도°C")
+        self.shock_edit.setText("충격")
+        self.speed_edit.setText("속도km/h")
 
         self.main_btn.clicked.connect(self.return_main)
-
-    def update_display(self, shock, temp):
-        self.temp_edit.setText(f"{temp: .1f}°C")
-        self.shock_edit.setText(f"{shock} times")
-        self.speed_edit.setText("속도km/h")
 
     def return_main(self):
         self.parent.show()
@@ -220,6 +310,9 @@ class InfoWindow(QWidget,info_window):
         self.setWindowTitle("Info")
         self.parent = parent
 
+        self.driverText: QTextEdit = self.findChild(QTextEdit, "driverText")
+        self.backButton: QPushButton = self.findChild(QPushButton, "backButton")
+
         self.load_driver_data()
         self.main_btn.clicked.connect(self.return_main)
 
@@ -227,14 +320,13 @@ class InfoWindow(QWidget,info_window):
         try:
             conn = get_db_connection()
             with conn.cursor() as cur:
-                cur.execute("SELECT AVG(shock) as Shock, AVG(temperature) as Temp FROM sensor_data ")
-                result = cur.fetchall()
-
-                for row in result:
-                    self.info_edit.append(f"Temp: {row[0]} \n Shock: {row[1]}")
-
+                cur.execute("SELECT temperature, shock FROM sensor_data ORDER BY id DESC LIMIT 10")
+                results = cur.fetchall()
+                self.driverText.clear()
+                for temp, shock in results:
+                    self.driverText.append(f"Temp: {temp} °C, Shock: {shock}")
         except Exception as e:
-            print(f"[DB ERROR] {e}")
+            print(f"[DB LOAD ERROR] {e}")
         finally:
             conn.close()
 
@@ -242,43 +334,18 @@ class InfoWindow(QWidget,info_window):
         self.parent.show()
         self.close()
 
-class SensorThread(QThread):
-    new_data = pyqtSignal(float, float)  # shock, temp
-
-    def __init__(self,ser):
-        super().__init__()
-        self.ser = ser
-
-    def run(self):
-        while True:
-            shock, temp = self.get_sensor_data()
-            if shock is not None and temp is not None:
-                insert_to_db(shock, temp)
-                self.new_data.emit(shock, temp)  # 시그널 발생
-            time.sleep(1)
-
-    def get_sensor_data(self):
-        packet = read_aligned_packet(self.ser)
-        command = packet[1:3].decode("ascii", errors="replace")
-        if command == "DB":
-            shock = struct.unpack('<f', packet[7:11])[0]
-            temp = struct.unpack('<f', packet[11:15])[0]
-            return shock, temp
-        return None, None
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
+    main()
 
-    ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=TIMEOUT_S)
+    app = QApplication(sys.argv)
+    window1 = RCController()
+    window1.show()
 
     window = MainWindow()
-    window.sensor_thread = SensorThread(ser)
     window.show()
-
-    # DB 삽입 스레드 시작
-    db_thread = threading.Thread(target=main, daemon=True)
-    db_thread.start()
-
-
+    
     sys.exit(app.exec())
+
+
     

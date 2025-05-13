@@ -3,33 +3,10 @@
 #include <ArduinoJson.h>
 #include <LiquidCrystal.h>
 #include <SoftwareSerial.h>
-#include <Servo.h>
 
 #define BAUD_RATE 9600
-#define ESP_BAUD_RATE 9600
-#define BT_BAUD_RATE 9600
 
 // === 핀 정의 ===
-
-// 통신
-#define ESP_RX_PIN 14
-#define ESP_TX_PIN 15
-SoftwareSerial espSerial(ESP_RX_PIN, ESP_TX_PIN);  // ESP32
-
-#define BT_RXD 2
-#define BT_TXD 3
-SoftwareSerial btSerial(BT_RXD, BT_TXD);    // Bluetooth
-
-// 제어
-#define MOTOR_L_IN1 22
-#define MOTOR_L_IN2 23
-#define MOTOR_R_IN1 24
-#define MOTOR_R_IN2 25
-#define MOTOR_1_SPEED 5
-#define MOTOR_2_SPEED 6
-#define SERVO 9
-
-Servo steering;
 
 // 센서
 
@@ -48,12 +25,6 @@ Servo steering;
 #define LIGHT_SENSOR_PIN A2
 
 // 출력
-#define LCD_RS_PIN 30
-#define LCD_EN_PIN 31
-#define LCD_D4_PIN 32
-#define LCD_D5_PIN 33
-#define LCD_D6_PIN 34
-#define LCD_D7_PIN 35
 
 #define BUZZER_PIN 11
 
@@ -64,40 +35,6 @@ Servo steering;
 #define RFID_RST_PIN 44
 #define RFID_SS_PIN 10
 #define RFID_DEBOUNCE_TIME 1000
-
-
-// === LCD Manager ===
-class LCDManager
-{
-  private:
-    LiquidCrystal lcd;
-
-  public:
-    LCDManager(uint8_t rs, uint8_t en, uint8_t d4, uint8_t d5, uint8_t d6, uint8_t d7)
-      : lcd(rs, en, d4, d5, d6, d7)
-    {
-    }
-
-    void begin()
-    {
-      lcd.begin(16, 2);
-      lcd.clear();
-      lcd.print("Init");
-    }
-
-    void printLine(int row, const String &text)
-    {
-      lcd.setCursor(0, row);
-      lcd.print("                ");
-      lcd.setCursor(0, row);
-      lcd.print(text);
-    }
-
-    void clear()
-    {
-      lcd.clear();
-    }
-};
 
 // === Alcohol Sensor Manager ===
 class AlcoholManager
@@ -177,55 +114,7 @@ class AlcoholManager
     }
 };
 
-// === Drive Motor Manager ===
-class DriveManager 
-{
-  public:
-    void begin() 
-    {
-      pinMode(MOTOR_L_IN1, OUTPUT);
-      pinMode(MOTOR_L_IN2, OUTPUT);
-      pinMode(MOTOR_R_IN1, OUTPUT);
-      pinMode(MOTOR_R_IN2, OUTPUT);
-      pinMode(MOTOR_1_SPEED, OUTPUT);
-      pinMode(MOTOR_2_SPEED, OUTPUT);
-      steering.attach(SERVO);
-      steering.write(90);
-    }
-
-    void moveForward(int speed = 150) 
-    {
-      digitalWrite(MOTOR_L_IN1, HIGH);
-      digitalWrite(MOTOR_L_IN2, LOW);
-      digitalWrite(MOTOR_R_IN1, HIGH);
-      digitalWrite(MOTOR_R_IN2, LOW);
-      analogWrite(MOTOR_1_SPEED, speed);
-      analogWrite(MOTOR_2_SPEED, speed);
-    }
-
-    void moveBackward(int speed = 150) 
-    {
-      digitalWrite(MOTOR_L_IN1, LOW);
-      digitalWrite(MOTOR_L_IN2, HIGH);
-      digitalWrite(MOTOR_R_IN1, LOW);
-      digitalWrite(MOTOR_R_IN2, HIGH);
-      analogWrite(MOTOR_1_SPEED, speed);
-      analogWrite(MOTOR_2_SPEED, speed);
-    }
-
-    void stopMotors() 
-    {
-      digitalWrite(MOTOR_L_IN1, LOW);
-      digitalWrite(MOTOR_L_IN2, LOW);
-      digitalWrite(MOTOR_R_IN1, LOW);
-      digitalWrite(MOTOR_R_IN2, LOW);
-      analogWrite(MOTOR_1_SPEED, 0);
-      analogWrite(MOTOR_2_SPEED, 0);
-    }
-};
-
 // === Obstacle Alert Manager (Ultrasonic + Buzzer) ===
-class ObstacleManager 
 class ObstacleManager
 {
   private:
@@ -649,131 +538,6 @@ class RFIDManager
     }
 };
 
-// GPS // should be moved to esp32-cam
-/*
-class GPSWiFiSender 
-{
-  private:
-      const char* ssid;
-      const char* password;
-      const char* serverIP;
-      uint16_t serverPort;
-
-      SoftwareSerial gpsSerial;
-      TinyGPSPlus gps;
-      WiFiClient client;
-
-  public:
-      GPSWiFiSender(const char* wifiSSID, const char* wifiPass, const char* serverIp, uint16_t port)
-          : ssid(wifiSSID), password(wifiPass), serverIP(serverIp), serverPort(port), gpsSerial(D5, D6) {} // D5=RX, D6=TX
-
-      void begin() 
-      {
-          Serial.begin(115200);
-          gpsSerial.begin(9600);
-
-          WiFi.begin(ssid, password);
-          Serial.print("Connecting to WiFi");
-          while (WiFi.status() != WL_CONNECTED) 
-          {
-              delay(500);
-              Serial.print(".");
-          }
-          Serial.println("\nWiFi Connected: " + WiFi.localIP().toString());
-      }
-
-      void updateGPS() 
-      {
-          while (gpsSerial.available()) 
-          {
-              gps.encode(gpsSerial.read());
-          }
-      }
-
-      bool isLocationValid() 
-      {
-          return gps.location.isValid();
-      }
-
-      String getGPSData() 
-      {
-          if (gps.location.isUpdated()) 
-          {
-              String data = String("LAT:") + gps.location.lat() + ",LON:" + gps.location.lng();
-              return data;
-          }
-          return "";
-      }
-
-      void sendData() 
-      {
-          if (!client.connected()) 
-          {
-              Serial.println("Connecting to server...");
-              if (!client.connect(serverIP, serverPort)) 
-              {
-                  Serial.println("Connection failed.");
-                  return;
-              }
-              Serial.println("Connected to server.");
-          }
-
-          String data = getGPSData();
-          if (data.length() > 0) 
-          {
-              client.println(data);
-              Serial.println("Sent: " + data);
-          }
-      }
-};
-*/
-// // === ESP32 Manager ===
-// class ESPManager
-// {
-//   private:
-//     SoftwareSerial &esp;
-
-//   public:
-//     ESPManager(SoftwareSerial &serial) : esp(serial)
-//     {
-//     }
-
-//     void sendUID(const String &uid)
-//     {
-//       esp.println(uid);
-//     }
-
-//     String getResponse()
-//     {
-//       if (esp.available())
-//       {
-//         String res = esp.readStringUntil('\n');
-//         res.trim();
-//         return res;
-//       }
-//       return "";
-//     }
-// };
-
-// // === Bluetooth Manager ===
-// class BluetoothManager 
-// {
-//   private:
-//     SoftwareSerial &bt;
-//   public:
-//     BluetoothManager(SoftwareSerial &serial) : bt(serial) {}
-//     String getCommand() 
-//     {
-//       if (bt.available()) 
-//       {
-//         String cmd = bt.readStringUntil('\n');
-//         cmd.trim();
-//         return cmd;
-//       }
-//       return "";
-//     }
-// };
-
 enum DriveState { WAIT_FOR_AUTH, MEASURING, ACCESS_GRANTED, ACCESS_DENIED };
 
 // === System Manager ===
@@ -951,8 +715,8 @@ void loop()
   // Check for communication (manual control commands)
   if (Serial.available()) {
     String Cmd = Serial.read();
-    Serial.print("Received from BT: "); Serial.println(Cmd);
-    systemManager.handleDriveCommand(Cmd); 
+    Serial.println(Cmd);
+    
   }
 
   // Periodically send combined sensor data
@@ -973,9 +737,6 @@ void loop()
     Serial.print("Sending sensor bundle to ESP: ");
     serializeJson(sensorDoc, Serial); // Debug print
     Serial.println();
-
-    serializeJson(sensorDoc, espSerial);
-    espSerial.println(); // Ensure newline for parsing on ESP side
   }
 
   systemManager.update();

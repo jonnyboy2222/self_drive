@@ -507,8 +507,8 @@ class InfoWindow(QWidget, info_window_ui):
         else:
             print("Warning: InfoWindow UI missing 'main_btn' or 'backButton'")
 
-        if not hasattr(self, 'info_edit') and not hasattr(self, 'driverText'):
-            print("Warning: InfoWindow UI missing 'info_edit' or 'driverText' for data display.")
+        if not hasattr(self, 'info_edit') and not hasattr(self, 'main_edit'):
+            print("Warning: InfoWindow UI missing 'info_edit' or 'main_edit' for data display.")
 
         self.load_driver_data_from_db()
 
@@ -516,8 +516,8 @@ class InfoWindow(QWidget, info_window_ui):
         text_widget = None
         if hasattr(self, 'info_edit'): 
             text_widget = self.info_edit
-        elif hasattr(self, 'driverText'): 
-            text_widget = self.driverText
+        elif hasattr(self, 'main_edit'): 
+            text_widget = self.main_edit
         
         if not text_widget:
             print("InfoWindow: No text widget found to display data.")
