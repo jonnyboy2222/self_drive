@@ -23,6 +23,10 @@ SERIAL_PORT = '/dev/ttyACM0'
 BAUD_RATE = 9600
 TIMEOUT_S = 1.0
 
+SERIAL_PORT2 = "/dev/ttyACM2"
+BAUD_RATE2 = 9600
+TIMEOUT_S2 = 1.0
+
 TCP_SERVER_IP = '192.168.2.120'
 TCP_SERVER_PORT = 12345
 
@@ -50,11 +54,11 @@ db_pool = PooledDB(
 def get_db_connection():
     return db_pool.connection()
 
-def insert_to_db(shock, temp):
+def insert_to_db(uid_hex, shock, temp):
     try:
         conn = get_db_connection()
         with conn.cursor() as cur:
-            cur.execute("INSERT INTO sensor_data (shock, temperature) VALUES (%s, %s)", (shock, temp))
+            cur.execute("INSERT INTO sensor_data (uid, shock, temperature) VALUES (%s, %s)", (uid_hex, shock, temp))
     except Exception as e:
         print(f"[DB ERROR] {e}")
     finally:
@@ -110,16 +114,41 @@ def listen_response(sock, ser):
             print(f"[TCP Read Error] {e}")
             break
 
+def listen_extra_serial(ser_extra, ser_main):
+    while True:
+        try:
+            if ser_extra.in_waiting >= 3:
+                header = ser_extra.read(1)
+                if header[0] == 0x00:
+                    cmd_bytes = ser_extra.read(2)
+                    cmd = cmd_bytes.decode('ascii', errors='replace')
+                    if cmd:
+                        print(f"[SER2] Received MB packet: {header.hex()} {cmd_bytes}")
+
+                        packet = PACKET_HEADER + cmd_bytes + b'\x00'
+                        ser_main.write(packet)
+
+                        print("[SER2 → SER1] Forwarded MB packet to /dev/ttyACM0")
+                    else:
+                        print("There is no valid cmd.")
+                        
+        except Exception as e:
+            print(f"[SER2 ERROR] {e}")
+        time.sleep(0.05)
+
+
 def main():
     try:
         with serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=TIMEOUT_S) as ser, \
-             socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            serial.Serial(SERIAL_PORT2, BAUD_RATE2, timeout=TIMEOUT_S2) as ser2, \
+            socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
 
             print("Connecting to TCP server...")
             sock.connect((TCP_SERVER_IP, TCP_SERVER_PORT))
             print("Connected to TCP server.")
 
             threading.Thread(target=listen_response, args=(sock, ser), daemon=True).start()
+            threading.Thread(target=listen_extra_serial, args=(ser2, ser), daemon=True).start()
 
             while True:
                 packet = read_aligned_packet(ser)
@@ -129,9 +158,10 @@ def main():
                 command = packet[1:3].decode("ascii", errors="replace")
 
                 if command == "DB":
+                    uid_hex = packet[3:7].hex().upper()
                     shock = struct.unpack('<f', packet[7:11])[0]
                     temp = struct.unpack('<f', packet[11:15])[0]
-                    insert_to_db(shock, temp)
+                    insert_to_db(uid_hex, shock, temp)
                     shock_queue.put(f"{shock:.2f}")
                     temp_queue.put(f"{temp:.2f}")
                     print(f"[PC1] Stored DB: Shock={shock:.2f}, Temp={temp:.2f}")
