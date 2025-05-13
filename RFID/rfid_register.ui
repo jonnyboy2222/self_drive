@@ -52,19 +52,6 @@
     <string>생년월일</string>
    </property>
   </widget>
-  <widget class="QLabel" name="label_4">
-   <property name="geometry">
-    <rect>
-     <x>20</x>
-     <y>110</y>
-     <width>66</width>
-     <height>18</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>차량 S/N</string>
-   </property>
-  </widget>
   <widget class="QLabel" name="label_5">
    <property name="geometry">
     <rect>
@@ -132,16 +119,6 @@
     <rect>
      <x>90</x>
      <y>50</y>
-     <width>113</width>
-     <height>26</height>
-    </rect>
-   </property>
-  </widget>
-  <widget class="QLineEdit" name="editSn">
-   <property name="geometry">
-    <rect>
-     <x>90</x>
-     <y>110</y>
      <width>113</width>
      <height>26</height>
     </rect>
@@ -251,11 +228,6 @@
    <column>
     <property name="text">
      <string>생년월일</string>
-    </property>
-   </column>
-   <column>
-    <property name="text">
-     <string>차량 S/N</string>
     </property>
    </column>
    <column>

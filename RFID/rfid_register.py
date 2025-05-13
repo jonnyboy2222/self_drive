@@ -1,5 +1,4 @@
 import serial
-import time
 import sys
 import socket
 import json
@@ -7,17 +6,12 @@ from PyQt6.QtWidgets import *
 from PyQt6.QtGui import *
 from PyQt6.QtCore import *
 from PyQt6 import uic
-import mysql.connector
+import struct
+
+PACKET_HEADER = 0xAA
+COMMAND = b'JS'
 
 from_class = uic.loadUiType("rfid_register.ui")[0]
-
-car_db_config = {
-    "host": "localhost",
-    "port": 3306,
-    "user": "kth",
-    "password": "*********",
-    "database": "car_db"
-}
 
 class SerialReader(QThread):
     data_received = pyqtSignal(str, bool)
@@ -31,7 +25,6 @@ class SerialReader(QThread):
     def run(self):
         try:
             with serial.Serial(self.port, self.baudrate, timeout=1) as ser:
-                #time.sleep(2)
                 while self.running:
                     if ser.in_waiting > 0:
                         line = ser.readline().decode('utf-8').strip()
@@ -57,21 +50,78 @@ class WindowClass(QMainWindow, from_class):
         self.tableWidget.horizontalHeader().setSectionResizeMode(
             QHeaderView.ResizeMode.Stretch)
 
-        self.car_db = mysql.connector.connect(**car_db_config)
         self.reader = SerialReader(port='/dev/ttyACM0', baudrate=9600)
         self.reader.data_received.connect(self.update_data)
         self.reader.start()
-        self.host = '0.0.0.0'  # 모든 IP로부터 수신
+        self.host = '192.168.2.234'  # 서버 ip
         self.port = 12345
 
         self.btnConfirm.clicked.connect(self.confirm_data)
         self.btnReset.clicked.connect(self.reset)
         self.btnRegister.clicked.connect(self.register_data)
 
+        self.disable()
+
+    def enable(self):
+        self.editUid.setDisabled(False)
+        self.editName.setDisabled(False)
+        self.editBirth.setDisabled(False)
+        self.editHeight.setDisabled(False)
+        self.editWeight.setDisabled(False)
+        self.editPhone.setDisabled(False)
+        self.editLicense.setDisabled(False)
+
+        self.btnConfirm.setDisabled(False)
+        self.btnRegister.setDisabled(False)
+
+    def disable(self):
+        self.editUid.setDisabled(True)
+        self.editName.setDisabled(True)
+        self.editBirth.setDisabled(True)
+        self.editHeight.setDisabled(True)
+        self.editWeight.setDisabled(True)
+        self.editPhone.setDisabled(True)
+        self.editLicense.setDisabled(True)
+
+        self.btnConfirm.setDisabled(True)
+        self.btnRegister.setDisabled(True)
+
     def update_data(self, data, success):
         if success:
-            self.editUid.setText(data)
-            self.labelStatus.setText("인식 완료!")
+            # 중복 체크
+            check_data = {
+                "purpose" : "verification",
+                "rfid_uid" : data
+            }
+            check_res = self.send_tcp_data(check_data, self.host, self.port)
+            if check_res:
+                try:
+                    res_json = json.loads(check_res.decode())
+                    if res_json.get("message") == "PASS":
+                        self.enable()
+                        self.editUid.setText(data)
+                        self.labelStatus.setText("인식 완료!")
+                    else:
+                        QMessageBox.warning(
+                            self, "등록 오류", "모든 데이터가 이미 등록되어 있습니다.") 
+                        existing_user = dict(list(res_json.items())[3:])
+                        self.labelStatus.setText("초기화 버튼을 누른 뒤 다시 등록해주세요.")
+                        # 모든 행 제거
+                        self.tableWidget.setRowCount(0)
+            
+                        # 중복된 사용자 정보를 테이블에 표시
+                        if existing_user:
+                            duplicate_row = self.tableWidget.rowCount()
+                            self.tableWidget.insertRow(duplicate_row)
+                        
+                            # 기존 데이터를 빨간색으로 표시
+                            for index, (key, value) in enumerate(existing_user.items()):
+                                item = QTableWidgetItem(str(value))
+                                item.setForeground(QColor('red'))
+                                self.tableWidget.setItem(duplicate_row, index, item)
+                except Exception as e:
+                    QMessageBox.warning(
+                        self, "등록 오류", f"JSON 파싱 오류:{e}")
         else:
             self.labelStatus.setText(f"에러 발생: {data}")
 
@@ -81,17 +131,15 @@ class WindowClass(QMainWindow, from_class):
         self.tableWidget.setItem(row, 0, QTableWidgetItem(self.editUid.text()))
         self.tableWidget.setItem(row, 1, QTableWidgetItem(self.editName.text()))
         self.tableWidget.setItem(row, 2, QTableWidgetItem(self.editBirth.text()))
-        self.tableWidget.setItem(row, 3, QTableWidgetItem(self.editSn.text()))
-        self.tableWidget.setItem(row, 4, QTableWidgetItem(self.editHeight.text()))
-        self.tableWidget.setItem(row, 5, QTableWidgetItem(self.editWeight.text()))
-        self.tableWidget.setItem(row, 6, QTableWidgetItem(self.editPhone.text()))
-        self.tableWidget.setItem(row, 7, QTableWidgetItem(self.editLicense.text()))
+        self.tableWidget.setItem(row, 3, QTableWidgetItem(self.editHeight.text()))
+        self.tableWidget.setItem(row, 4, QTableWidgetItem(self.editWeight.text()))
+        self.tableWidget.setItem(row, 5, QTableWidgetItem(self.editPhone.text()))
+        self.tableWidget.setItem(row, 6, QTableWidgetItem(self.editLicense.text()))
 
         # 입력 필드 초기화
         self.editUid.clear()
         self.editName.clear()
         self.editBirth.clear()
-        self.editSn.clear()
         self.editHeight.clear()
         self.editWeight.clear()
         self.editPhone.clear()
@@ -104,17 +152,13 @@ class WindowClass(QMainWindow, from_class):
                     self, "등록 오류", "저장할 데이터가 없습니다!")
             #self.labelStatus.setText("저장할 데이터가 없습니다!")
             return
-            
-        cursor = self.car_db.cursor(buffered=True)
-        success_count = 0
-        error_count = 0
         
         try:
             # 모든 행에 대해 반복
             for row in range(self.tableWidget.rowCount() - 1, -1, -1):
                 # 모든 필드가 채워져 있는지 확인
                 is_empty = False
-                for col in range(8):  # 8개의 컬럼 확인
+                for col in range(7):  # 8개의 컬럼 확인
                     item = self.tableWidget.item(row, col)
                     if not item or not item.text().strip():
                         is_empty = True
@@ -128,166 +172,46 @@ class WindowClass(QMainWindow, from_class):
                 
                 uid = self.tableWidget.item(row, 0).text()
                 
-                # 중복 체크
-                check_data = {
-                    "purpose" : "verification",
-                    "rfid_uid" : uid
+                value_data = {
+                    "purpose" : "db",
+                    "rfid_uid" : uid,
+                    "name" : self.tableWidget.item(row, 1).text(),
+                    "birth_date" : self.tableWidget.item(row, 2).text(),
+                    "height" : self.tableWidget.item(row, 3).text(),
+                    "weight" : self.tableWidget.item(row, 4).text(),
+                    "phone_num" : self.tableWidget.item(row, 5).text(),
+                    "license_num" : self.tableWidget.item(row, 6).text()
                 }
-                check_res = self.send_tcp_data(check_data, self.host, self.port)
-                if check_res:
-                    try:
-                        res_json = json.loads(check_res.decode())
-                        if res_json.get("message") == "PASS":
-                            value_data = {
-                                "purpose" : "db",
-                                "rfid_uid" : uid,
-                                "name" : self.tableWidget.item(row, 1).text(),
-                                "birth_date" : self.tableWidget.item(row, 2).text(),
-                                "height" : self.tableWidget.item(row, 3).text(),
-                                "weight" : self.tableWidget.item(row, 4).text(),
-                                "phone_num" : self.tableWidget.item(row, 5).text(),
-                                "license_num" : self.tableWidget.item(row, 6).text()
-                            }
-                            insert_res = self.send_tcp_data(self, value_data, self.host, self.port)
-                            if insert_res:
-                                in_res_json = json.loads(insert_res.decode())
-                                if in_res_json.get("message") == "PASS":
-                                    message = f"{in_res_json.get("success_count")}개의 데이터 등록 성공"
-                                    if int(in_res_json.get("success_count")) > 0:
-                                        message += f"\n{in_res_json.get("success_count")}개의 데이터가 이미 등록되어 있습니다."
-                                        QMessageBox.information(self, "등록 결과", message)
-                                        #self.labelStatus.setText(message)
-                                else:
-                                    #self.labelStatus.setText("모든 데이터가 이미 등록되어 있습니다.")
-                                    QMessageBox.warning(
-                                        self, "등록 오류", "모든 데이터가 이미 등록되어 있습니다.")
-                                    existing_user = dict(list(in_res_json.items())[3:])
-                                    self.labelStatus.setText("")
-                                    # 모든 행 제거
-                                    self.tableWidget.setRowCount(0)
-            
-                                    # 중복된 사용자 정보를 테이블에 표시
-                                    if existing_user:
-                                        duplicate_row = self.tableWidget.rowCount()
-                                        self.tableWidget.insertRow(duplicate_row)
-                        
-                                        # 기존 데이터를 빨간색으로 표시
-                                        for index, (key, value) in enumerate(existing_user.items()):
-                                            item = QTableWidgetItem(str(value))
-                                            item.setForeground(QColor('red'))
-                                            self.tableWidget.setItem(duplicate_row, index, item)
-
-                        else:
-                            QMessageBox.warning(
-                                self, "등록 오류", "모든 데이터가 이미 등록되어 있습니다.")
-                            existing_user = dict(list(in_res_json.items())[3:])
-                            self.labelStatus.setText("")
-                            # 모든 행 제거
-                            self.tableWidget.setRowCount(0)
-            
-                            # 중복된 사용자 정보를 테이블에 표시
-                            if existing_user:
-                                duplicate_row = self.tableWidget.rowCount()
-                                self.tableWidget.insertRow(duplicate_row)
-                        
-                                # 기존 데이터를 빨간색으로 표시
-                                for index, (key, value) in enumerate(existing_user.items()):
-                                    item = QTableWidgetItem(str(value))
-                                    item.setForeground(QColor('red'))
-                                    self.tableWidget.setItem(duplicate_row, index, item)
-                    except Exception as e:
+                insert_res = self.send_tcp_data(self, value_data, self.host, self.port)
+                if insert_res:
+                    in_res_json = json.loads(insert_res.decode())
+                    if in_res_json.get("message") == "PASS":
+                        message = "데이터 등록 성공"
+                        QMessageBox.information(self, "등록 결과", message)
+                        #self.labelStatus.setText(message)
+                    else:
+                        #self.labelStatus.setText("모든 데이터가 이미 등록되어 있습니다.")
+                        error_msg = "등록 실패!"
                         QMessageBox.warning(
-                            self, "등록 오류", f"JSON 파싱 오류:{e}")
-
-                '''
-                check_sql = "SELECT * FROM user WHERE uid = %s"
-                cursor.execute(check_sql, (uid,))
-                existing_user = cursor.fetchone()
-                
-                if existing_user:
-                    error_count += 1
-                    continue
-                
-                # 데이터 타입 변환
-                try:
-                    # birth_date를 date 형식으로 변환 (YYYY-MM-DD 형식 가정)
-                    birth_date = self.tableWidget.item(row, 2).text()
-                    if not birth_date:
-                        raise ValueError("생년월일이 비어있습니다.")
-                    
-                    # height와 weight를 float으로 변환
-                    height = float(self.tableWidget.item(row, 4).text() or 0)
-                    weight = float(self.tableWidget.item(row, 5).text() or 0)
-                    
-                    # 데이터 등록
-                    insert_sql = """
-                        INSERT INTO user (uid, user_name, birth_date, 
-                        serial_num, height, weight, phone_num, license_num)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    """
-                    values = (
-                        uid,
-                        self.tableWidget.item(row, 1).text(),
-                        birth_date,
-                        self.tableWidget.item(row, 3).text(),
-                        height,
-                        weight,
-                        self.tableWidget.item(row, 6).text(),
-                        self.tableWidget.item(row, 7).text()
-                    )
-                    
-                    cursor.execute(insert_sql, values)
-                    success_count += 1
-                    
-                except ValueError as e:
-                    self.labelStatus.setText(f"데이터 형식 오류: {str(e)}")
-                    continue
-                except Exception as e:
-                    self.labelStatus.setText(f"데이터 처리 오류: {str(e)}")
-                    continue
-            
-            self.car_db.commit()
-            
-            # 결과 메시지 표시
-            if success_count > 0:
-                message = f"{success_count}개의 데이터 등록 성공"
-                if error_count > 0:
-                    message += f"\n{error_count}개의 데이터가 이미 등록되어 있습니다."
-                QMessageBox.information(self, "등록 결과", message)
-                #self.labelStatus.setText(message)
-            else:
-                #self.labelStatus.setText("모든 데이터가 이미 등록되어 있습니다.")
-                QMessageBox.warning(
-                    self, "등록 오류", "모든 데이터가 이미 등록되어 있습니다.")
-            
-            self.labelStatus.setText("")
-            # 모든 행 제거
-            self.tableWidget.setRowCount(0)
-            
-            # 중복된 사용자 정보를 테이블에 표시
-            if existing_user:
-                duplicate_row = self.tableWidget.rowCount()
-                self.tableWidget.insertRow(duplicate_row)
-                        
-                # 기존 데이터를 빨간색으로 표시
-                for col, value in enumerate(existing_user):
-                    item = QTableWidgetItem(str(value))
-                    item.setForeground(QColor('red'))
-                    self.tableWidget.setItem(duplicate_row, col, item)
-            
-        except mysql.connector.Error as err:
-            self.labelStatus.setText(f"등록 오류: {err}")
-            self.car_db.rollback()
-        '''
-            
-        finally:
-            cursor.close()
+                            self, "등록 오류", error_msg)
+                            
+        except Exception as e:
+            QMessageBox.warning(self, "등록 오류", f"JSON 파싱 오류:{e}")
 
     def send_tcp_data(self, data, host, port):
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                json_bytes = json.dumps(data).encode("utf-8")
+                length = len(json_bytes)
+
+                packet = bytearray()
+                packet.append(PACKET_HEADER)
+                packet += COMMAND
+                packet += struct.pack("<H", length)
+                packet += json_bytes
+                
                 s.connect((host, port))
-                s.sendall((json.dumps(data) + '\\n').encode())
+                s.sendall(packet)
 
                 response = s.recv(1024)
                 return response.decode()
