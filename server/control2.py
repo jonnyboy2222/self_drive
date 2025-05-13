@@ -34,6 +34,8 @@ VF_RESPONSE_SIZE = 4 # 1(header) + 2(command) + 1(VF_RESP) + 2 (padding)
 
 temp_queue = queue.Queue()
 shock_queue = queue.Queue()
+cmd_queue = queue.Queue(maxsize=2)
+alc_queue = queue.Queue()
 
 # Database connection pool
 db_pool = PooledDB(
@@ -87,7 +89,8 @@ def read_aligned_packet(ser):
                 if ser.in_waiting == 0:
                     packet = byte + cmd_bytes + lookahead
                     print(f"[RECV] VF Response: {packet.hex().upper()}")
-                    return packet
+                    
+                    alc_queue.put(lookahead[0])
 
                 # 아니면 요청 (나머지 3바이트 추가로 읽기 → 총 7바이트)
                 rest = ser.read(3)
@@ -107,6 +110,27 @@ def listen_response(sock, ser):
                 if command == "VF":
                     print(f"[RESP] VF response from PC2: {resp}")
                     ser.write(resp)
+
+
+            # 큐에서 명령을 확인하고, "MB"가 있으면 "MB"를 전송하고, 없으면 "ST"를 전송
+            if not cmd_queue.empty():
+                # 큐에서 모든 명령을 확인
+                queue_items = []
+                while not cmd_queue.empty():
+                    queue_items.append(cmd_queue.get_nowait())
+
+                # "MB"가 있으면 "MB" 보내기, 없으면 "ST" 보내기
+                packet = bytearray()
+                packet.append(PACKET_HEADER)
+                
+                if "MB" in queue_items:
+                    packet += b'MB'
+                else:
+                    packet += b'ST'
+
+                packet.append(0x00)  # 명령의 끝 부분을 0x00으로 설정
+                ser.write(packet)
+                print(f"[CMD] Sent: {packet.hex()}")
         except Exception as e:
             print(f"[TCP Read Error] {e}")
             break
@@ -201,30 +225,57 @@ class RCController(QWidget):
                 if Qt.Key.Key_W in self.keys_pressed:
                     self.ser.write(b'MF\n')
                     print(self.ser.readline(), 'MF')
+
+                    check = True
+                    if cmd_queue.full():
+                        cmd_queue.get_nowait()
+                    if check:
+                        cmd_queue.put("MF")
+                        check = False
+
                 elif Qt.Key.Key_S in self.keys_pressed:
                     self.ser.write(b'MB\n')
-
-                    packet = bytearray()
-                    packet.append(PACKET_HEADER)
-                    packet += b'MB'
-                    packet.append(0x00)
-                    self.ser2.write(packet)
                     print(self.ser.readline(), 'MB')
+
+                    check = True
+                    if cmd_queue.full():
+                        cmd_queue.get_nowait()
+                    if check:
+                        cmd_queue.put("MB")
+                        check = False
+
                 elif Qt.Key.Key_A in self.keys_pressed:
                     self.ser.write(b'TL\n')
                     print(self.ser.readline(), 'TL')
+
+                    check = True
+                    if cmd_queue.full():
+                        cmd_queue.get_nowait()
+                    if check:
+                        cmd_queue.put("TL")
+                        check = False
+
                 elif Qt.Key.Key_D in self.keys_pressed:
                     self.ser.write(b'TR\n')
                     print(self.ser.readline(), 'TR')
+
+                    check = True
+                    if cmd_queue.full():
+                        cmd_queue.get_nowait()
+                    if check:
+                        cmd_queue.put("TR")
+                        check = False
+
                 else:
                     self.ser.write(b'MS\n')
-
-                    packet = bytearray()
-                    packet.append(PACKET_HEADER)
-                    packet += b'ST'
-                    packet.append(0x00)
-                    self.ser2.write(packet)
                     print(self.ser.readline(), 'MS')
+
+                    check = True
+                    if cmd_queue.full():
+                        cmd_queue.get_nowait()
+                    if check:
+                        cmd_queue.put("ST")
+                        check = False
 
                 # 속도 제어
                 if Qt.Key.Key_Q in self.keys_pressed and Qt.Key.Key_E not in self.keys_pressed:
@@ -370,9 +421,9 @@ class StatusWindow(QWidget, status_window):
     def poll_data_from_thread(self):
         try:
             shock = shock_queue.get_nowait()
-            temp = temp.queue.get_nowait()
+            temp = temp_queue.get_nowait()
             self.updateStatus(shock, temp)
-            shock_queue.empty()
+            shock_queue.empty() # queue를 비우려는 목적인가요
         except queue.Empty:
             pass
 
@@ -425,7 +476,7 @@ class InfoWindow(QWidget,info_window):
             shock = shock_queue.get_nowait()
             temp = temp.queue.get_nowait()
             self.updateDisplay(f"{shock}times \n {temp}°C")
-            shock_queue.empty()
+            shock_queue.empty() # queue를 비우려는 목적인가요
         except queue.Empty:
             pass
 
