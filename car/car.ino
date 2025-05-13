@@ -9,8 +9,8 @@
 #define BAUD_RATE 9600
 
 // RFID (SPI: 50=MISO, 51=MOSI, 52=SCK)
-#define RFID_SS_PIN     53   // SDA
-#define RFID_RST_PIN    49
+#define RFID_SS_PIN         53   // SDA
+#define RFID_RST_PIN        49
 
 // Alcohol Sensor
 #define ALCOHOL_SENSOR_PIN  A8
@@ -29,7 +29,7 @@
 #define BUZZER_PIN          44
 
 //shock
-#define SHOCK_SENSOR_PIN 43
+#define SHOCK_SENSOR_PIN    43
 // Manager Instances
 RFIDManager rfidManager(RFID_SS_PIN, RFID_RST_PIN);
 AlcoholManager alcoholManager(ALCOHOL_SENSOR_PIN, SWITCH_PIN);
