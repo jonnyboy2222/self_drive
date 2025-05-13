@@ -434,13 +434,13 @@ class MainWindow(QWidget, main_window_ui):
         if not self.status_window_instance:
             self.status_window_instance = StatusWindow(self)
         self.status_window_instance.show()
-        # self.hide() # Typically, main window is not hidden when opening a status dialog
+        self.hide()
 
     def show_info_window(self):
         if not self.info_window_instance:
             self.info_window_instance = InfoWindow(self)
         self.info_window_instance.show()
-        # self.hide()
+        self.hide()
 
     def closeEvent(self, event: QKeyEvent):
         self.log_to_gui("Application closing...")
