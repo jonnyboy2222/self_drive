@@ -29,76 +29,11 @@ const char SIGNAL_F = 'F';
 int idx=0;
 char recv_buffer[4];
 
-enum DriveState {
+enum State {
     WAIT_FOR_AUTH,
     MEASURING,
     ACCESS_GRANTED,
     ACCESS_DENIED
-};
-
-// === Drive Motor Manager ===
-class DriveManager
-{
-  private:
-    bool reversingFlag = false;
-  public:
-    bool isReversing()
-    {
-      return reversingFlag;
-    }
-    void begin()
-    {
-      pinMode(MOTOR_L_IN1, OUTPUT);
-      pinMode(MOTOR_L_IN2, OUTPUT);
-      pinMode(MOTOR_R_IN1, OUTPUT);
-      pinMode(MOTOR_R_IN2, OUTPUT);
-      stop();
-    }
-
-    void forward()
-    {
-      reversingFlag = false;
-      digitalWrite(MOTOR_L_IN1, HIGH);
-      digitalWrite(MOTOR_L_IN2, LOW);
-      digitalWrite(MOTOR_R_IN1, HIGH);
-      digitalWrite(MOTOR_R_IN2, LOW);
-    }
-
-    void backward()
-    {
-      reversingFlag = true;
-      digitalWrite(MOTOR_L_IN1, LOW);
-      digitalWrite(MOTOR_L_IN2, HIGH);
-      digitalWrite(MOTOR_R_IN1, LOW);
-      digitalWrite(MOTOR_R_IN2, HIGH);
-    }
-
-    void left()
-    {
-      reversingFlag = false;
-      digitalWrite(MOTOR_L_IN1, LOW);
-      digitalWrite(MOTOR_L_IN2, LOW);
-      digitalWrite(MOTOR_R_IN1, HIGH);
-      digitalWrite(MOTOR_R_IN2, LOW);
-    }
-
-    void right()
-    {
-      reversingFlag = false;
-      digitalWrite(MOTOR_L_IN1, HIGH);
-      digitalWrite(MOTOR_L_IN2, LOW);
-      digitalWrite(MOTOR_R_IN1, LOW);
-      digitalWrite(MOTOR_R_IN2, LOW);
-    }
-
-    void stop()
-    {
-      reversingFlag = false;
-      digitalWrite(MOTOR_L_IN1, LOW);
-      digitalWrite(MOTOR_L_IN2, LOW);
-      digitalWrite(MOTOR_R_IN1, LOW);
-      digitalWrite(MOTOR_R_IN2, LOW);
-    }
 };
 
 // === System Manager ===
@@ -106,11 +41,10 @@ class SystemManager
 {
   private:
     AlcoholManager &alcohol;
-    DriveManager &drive;
-    DriveState currentState = WAIT_FOR_AUTH;
+    State currentState = WAIT_FOR_AUTH;
   public:
-    SystemManager(AlcoholManager &a, DriveManager &d)
-      : alcohol(a), drive(d)
+    SystemManager(AlcoholManager &a)
+      : alcohol(a)
     {
     }
 
@@ -119,7 +53,7 @@ class SystemManager
       if (!isPass)
       {
         drive.stop();
-        currentState = ACCESS_DENIED;
+        currentState = WAIT_FOR_AUTH;
         return;
       }
 
@@ -177,9 +111,8 @@ class SystemManager
 };
 
 RFIDManager rfidManager(RFID_SS_PIN, RFID_RST_PIN);
-DriveManager driveManager;
 AlcoholManager alcoholManager;
-SystemManager systemManager(alcoholManager, driveManager);
+SystemManager systemManager(alcoholManager);
 
 void setup() {
   // put your setup code here, to run once:
@@ -207,7 +140,7 @@ void loop()
     Serial.write((const uint8_t *)send_buffer, VF_PACKET_SIZE);
   }
 
-  // 수신 패킷 처리
+  // UID 등록 확인 결과 수신
   static int idx = 0;
   static char recv_buffer[4];
 
