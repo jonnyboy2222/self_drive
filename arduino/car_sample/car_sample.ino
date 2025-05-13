@@ -45,7 +45,7 @@ Servo steering;
 #define ALCOHOL_SENSOR_PIN A1
 #define SWITCH_PIN 36
 
-#define HEADLIGHT_LED_PIN A2
+#define LIGHT_SENSOR_PIN A2
 
 // 출력
 #define LCD_RS_PIN 30
@@ -57,7 +57,7 @@ Servo steering;
 
 #define BUZZER_PIN 11
 
-#define LIGHT_SENSOR_PIN 13
+#define HEADLIGHT_LED_PIN 13
 #define LIGHT_THRESHOLD  300
 
 // RFID
@@ -226,42 +226,154 @@ class DriveManager
 
 // === Obstacle Alert Manager (Ultrasonic + Buzzer) ===
 class ObstacleManager 
+class ObstacleManager
 {
   private:
-    bool isReversing = false;
+
+    //후진 상태 체크 관련 변수
+    bool isbacking = false;
+
+    //초음파 관련 변수
+    const static int SAMPLESIZE = 10;                // num==10
+    float samples[SAMPLESIZE] = {0};         // 10개의 칸을 가진 float 배열(samples)이 되고, 모두 0으로 시작!
+    int sampleindex = 0;
+    float total_distance = 0;
+    float avg_distance = 0;                  // 평균
+    unsigned long pre_measuretime = 0;       //이전 거리측정 시간
+    unsigned long checktime_interval = 15;
+
+    //수동부저 관련 변수
+    unsigned long prebeeptime = 0;
+    bool buzzerstate = false;
+    int beepfreq = 0;
+    int beepinterval = 0;
 
   public:
-    void begin() 
+
+    void begin()
     {
       pinMode(ULTRASONIC_TRIG, OUTPUT);
       pinMode(ULTRASONIC_ECHO, INPUT);
       pinMode(BUZZER_PIN, OUTPUT);
     }
-    void setReversing(bool reversing) {
-      isReversing = reversing;
-    }
-    void update() 
+
+    ///////////////////////////////////////////////////////////////////////////////후진 중? 체크 함수////////////////////////////////////////////////////////////
+    // void isBackState()
+    // {
+    //   current_buttonstate = digitalRead(BUTTON);
+    //   if (pre_buttonstate == LOW && current_buttonstate == HIGH)
+    //   {
+    //     isbacking = !isbacking;
+    //   }
+    // }
+    void setReversing(bool state)
     {
-      if (!isReversing) return;
-      digitalWrite(ULTRASONIC_TRIG, LOW);
-      delayMicroseconds(2);
-      digitalWrite(ULTRASONIC_TRIG, HIGH);
-      delayMicroseconds(10);
-      digitalWrite(ULTRASONIC_TRIG, LOW);
+      isbacking = state;
+    }
 
-      long duration = pulseIn(ULTRASONIC_ECHO, HIGH, 30000);
-      int distance = duration * 0.034 / 2;
+/////////////////////////////////////////////////////////////////////////////초음파 평균값거리 측정함수////////////////////////////////////////////////////////
+    void avgDistance()
+    {
+      unsigned long nowtime = millis();
 
-      if (distance == 0 || distance > MAX_DISTANCE_CM) 
+      if (nowtime - pre_measuretime >= checktime_interval)
       {
-        noTone(BUZZER_PIN);
+        //센서 이용해서 거리 구하기
+        digitalWrite(ULTRASONIC_TRIG, LOW);
+        delayMicroseconds(2);
+        digitalWrite(ULTRASONIC_TRIG, HIGH);
+        delayMicroseconds(10);
+        digitalWrite(ULTRASONIC_TRIG, LOW);
+
+        unsigned long duration = pulseIn(ECHO, HIGH, 20000);      //부딪혔다가 돌아오는 시간(20ms초과하면 0반환)
+        float distance = duration * 0.034 / 2;                    //cm로 환산
+
+        if (distance>0 && distance<340)                    //이상값 제한(pulseIn(ECHO, HIGH, 20000)로 측정가능한게 340cm까지)
+        {
+          total_distance -= samples[sampleindex];
+          samples[sampleindex] = distance;
+          total_distance += samples[sampleindex];                      // total_distance 구하기
+          sampleindex = (sampleindex+1) % SAMPLESIZE ;                 // samples 안에 distance 10개 채우는 과정
+        }
+        pre_measuretime = nowtime;
+    
+        // avg_distance 구하기
+        if (sampleindex == 0)
+        {
+          avg_distance = total_distance / SAMPLESIZE;
+          Serial.print("AVG_DISTANCE: ");
+          Serial.println(avg_distance);
+        }
+      }     
+    }
+////////////////////////////////////////////////beepfreq 결정함수///////////////////////////////////////////////////////////////
+    void setBeepfreqByDistance()
+    {
+      if (avg_distance <= 10) 
+      {
+        beepfreq = 2000; 
+        beepinterval = 30;
+      } 
+      else if (avg_distance <= 20) 
+      {
+        beepfreq = 1500; 
+        beepinterval = 50;
+      } 
+      else if (avg_distance <= 40) 
+      {
+        beepfreq = 1000; 
+        beepinterval = 100;
+      } 
+      else if (avg_distance <= 70) 
+      {
+        beepfreq = 700;  
+        beepinterval = 200;
+      } 
+      else if (avg_distance <= 100) 
+      {
+        beepfreq = 400;  
+        beepinterval = 250;
       } 
       else 
       {
-        int freq = map(distance, MIN_DISTANCE_CM, MAX_DISTANCE_CM, 2000, 400);
-        int delayMs = map(distance, MIN_DISTANCE_CM, MAX_DISTANCE_CM, 50, 500);
-        tone(BUZZER_PIN, freq);
-        delay(delayMs);
+        beepfreq = 0;    
+        beepinterval = 0;
+        noTone(BUZZER_PIN);
+      }
+    }
+
+////////////////////////////////////////////////////////////////////수동부저 제어 함수///////////////////////////////////////////////////////////////
+    void controlBuzzer()
+    {
+      unsigned long nowtime = millis();
+      if (beepfreq>0 && nowtime - prebeeptime >= beepinterval)
+      {
+        prebeeptime = nowtime;
+        if (buzzerstate)
+        {
+          noTone(BUZZER_PIN);
+          buzzerstate = false;
+        }
+        else
+        {
+          tone(BUZZER_PIN, beepfreq);
+          buzzerstate = true;
+        }
+      }
+    }
+
+///////////////////////////////////////////////////////////////
+    void update()
+    {
+      if(isbacking)
+      {
+        avgDistance();
+        setBeepfreqByDistance();
+        controlBuzzer();
+      }
+
+      else 
+      {
         noTone(BUZZER_PIN);
       }
     }
@@ -332,47 +444,120 @@ class ShockManager
 };
 
 // === Temperature Manager ===
-class TempManager 
+class TempManager
 {
   private:
-    float current_temperature_c = 0.0;
+    const float TEMP_THRESHOLD = 37.0;
+    unsigned long pre_time = 0;
+    const unsigned long INTERVAL = 1000;
+    float temperature = 0;
+    float overtemperature = 0;
+
   public:
-    void begin() { pinMode(TEMP_SENSOR_PIN, INPUT); }
-    void update() 
+
+    void begin() 
     {
-      int raw = analogRead(TEMP_SENSOR_PIN);
-      float voltage = raw * 5.0 / 1023.0;
-      current_temperature_c = voltage * 100;
-      // Serial.print("TempManager: Updated temp to "); 
-      // Serial.println(current_temperature_c); // Debug
     }
-    float getCurrentTemperature() { // Getter for the current temperature
-    return current_temperature_c;
+
+    void measure_Temperature()
+    {
+      int adc_value = analogRead(TEMP_SENSEOR_PIN);
+      float voltage = adc_value * (5.0 / 1024.0);
+      temperature = voltage * 100;
+      // Serial.print("temperature : ");
+      // Serial.println(temperature);
+    }
+
+    float getTemp()
+    {
+      return temperature;
+    }
+
+
+    float getoverTemp()
+    {
+      return overtemperature ;
+    }
+
+    void update()
+    {
+      unsigned long now_time = millis();
+
+      if (now_time - pre_time >= INTERVAL) 
+      {
+        pre_time = now_time;
+        measure_Temperature();
+      }
     }
 };
 
 // === Ambient Light Manager ===
 class AmbientLightManager 
 {
+  private:
+    const static int LIGHTSAMPLESIZE = 10;
+    int light_samples[LIGHTSAMPLESIZE] = {0};
+
+    int light_sample_index = 0;
+    int total_lights = 0;
+    float avg_light = 0;
+    unsigned long now_light_measuretime = 0;
+    unsigned long pre_light_measuretime = 0;
+    unsigned long light_measuretime_interval = 50;
+
+    const int LIGHT_THRESHOLD = 140;
+
   public:
     void begin() 
     {
-      pinMode(LIGHT_SENSOR_PIN, INPUT);
       pinMode(HEADLIGHT_LED_PIN, OUTPUT);
+      pinMode(LIGHT_SENSOR_PIN, INPUT);
+
+      digitalWrite(HEADLIGHT_LED_PIN, LOW);
     }
 
-    void update() {
-      int lightValue = analogRead(LIGHT_SENSOR_PIN);
-      if (lightValue < LIGHT_THRESHOLD) 
+    void result_avg_Light() 
+    {
+      int light = analogRead(LIGHT_SENSOR_PIN);
+      int map_light = map(constrain(light, 50, 1020), 50, 1020, 255, 0);
+
+      total_lights -= light_samples[light_sample_index];
+      light_samples[light_sample_index] = map_light;
+      total_lights += light_samples[light_sample_index];
+
+      light_sample_index = (light_sample_index + 1) % LIGHTSAMPLESIZE;
+
+      if (light_sample_index == 0) 
+      {
+        avg_light = total_lights / LIGHTSAMPLESIZE;
+      }
+    }
+
+    void led_state_byThreshold() 
+    {
+      if (avg_light > LIGHT_THRESHOLD) 
       {
         digitalWrite(HEADLIGHT_LED_PIN, HIGH);
-      } 
+      }
       else 
       {
         digitalWrite(HEADLIGHT_LED_PIN, LOW);
       }
     }
+
+    void update() 
+    {
+      now_light_measuretime = millis();
+      if (now_light_measuretime - pre_light_measuretime >= light_measuretime_interval) 
+      {
+        result_avg_Light();
+        led_state_byThreshold();
+        pre_light_measuretime = now_light_measuretime;
+        Serial.println(avg_light);
+      }
+    }
 };
+
 
 // === RFID Manager ===
 class RFIDManager 
@@ -748,6 +933,8 @@ void loop()
   rfidManager.update();
   shockManager.update(); // Handles shock detection and calculates average internally
   tempManager.update(); // Handles temperature reading internally
+  float temp = tempManager.getTemp();
+  float overtemp = tempManager.getoverTemp();
   ambientLightManager.update(); // Handles light sensor and headlights
   
   // Handle incoming data from ESP32 (RFID verification results, YOLO commands)
