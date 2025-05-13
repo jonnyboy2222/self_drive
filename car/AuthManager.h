@@ -1,6 +1,7 @@
 #ifndef AUTH_MANAGER_H
 #define AUTH_MANAGER_H
 
+#include <Arduino.h>
 #include "RFIDManager.h"
 #include "AlcoholManager.h"
 

@@ -1,5 +1,4 @@
 #include "AmbientLightManager.h"
-#include <Arduino.h>
 
 const unsigned long AmbientLightManager::light_measuretime_interval = 50;
 

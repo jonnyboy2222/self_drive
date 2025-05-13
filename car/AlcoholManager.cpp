@@ -11,6 +11,7 @@ void AlcoholManager::begin()
 
 bool AlcoholManager::isSwitchPressed()
 {
+  static bool lastSwitch = HIGH;
   bool current = digitalRead(switchPin);
   bool pressed = (lastSwitch == HIGH && current == LOW);
   lastSwitch = current;

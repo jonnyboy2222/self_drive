@@ -1,5 +1,4 @@
 #include "AuthManager.h"
-#include <Arduino.h>
 
 const char CMD_VERIFY[] = "VF";
 const char CMD_PF[] = "PF";

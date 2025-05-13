@@ -26,8 +26,6 @@ class AlcoholManager
     unsigned long lastSampleTime = 0;
     unsigned long sum = 0;
     int count = 0;
-
-    bool lastSwitch = HIGH;
 };
 
 #endif

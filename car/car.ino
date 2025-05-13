@@ -1,5 +1,4 @@
 #include <SPI.h>
-#include <MFRC522.h>
 #include "RFIDManager.h"
 #include "AlcoholManager.h"
 #include "AuthManager.h"

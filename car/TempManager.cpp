@@ -1,5 +1,4 @@
 #include "TempManager.h"
-#include <Arduino.h>
 
 const float TempManager::TEMP_THRESHOLD = 37.0;
 

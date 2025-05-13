@@ -1,5 +1,4 @@
 #include "ObstacleManager.h"
-#include <Arduino.h>
 
 ObstacleManager::ObstacleManager(uint8_t trig, uint8_t echo, uint8_t buzzer)
   : trigPin(trig), echoPin(echo), buzzerPin(buzzer)
