@@ -333,15 +333,15 @@ class MainWindow(QWidget, main_window):
         self.main_edit.setText(message)
         QTimer.singleShot(3000, self.main_edit.clear)
 
-    def poll_data_from_thread(self):
-        try:
-            shock = shock_queue.get_nowait()
-            shock.get()
-            temp = temp.queue.get_nowait()
-            temp.get()
-            self.updateDisplay(f"{shock}times \n {temp}°C")
-        except queue.Empty:
-            pass
+    # def poll_data_from_thread(self):
+    #     try:
+    #         shock = shock_queue.get_nowait()
+    #         shock.get()
+    #         temp = temp.queue.get_nowait()
+    #         temp.get()
+    #         self.updateDisplay(f"{shock}times \n {temp}°C")
+    #     except queue.Empty:
+    #         pass
 
 class StatusWindow(QWidget, status_window):
     def __init__(self, parent):
@@ -360,6 +360,8 @@ class StatusWindow(QWidget, status_window):
         self.data_poll_timer2.start(5000)
 
         self.main_btn.clicked.connect(self.return_main)
+
+        self.poll_data_from_thread()
 
     def updateStatus(self, temp, shock):
         self.temp_edit.setText(f'{temp} °C')
@@ -393,7 +395,7 @@ class InfoWindow(QWidget,info_window):
         self.data_poll_timer3.timeout.connect(self.poll_data_from_thread)
         self.data_poll_timer3.start(5000)
 
-        self.updateDisplay()
+        self.poll_data_from_thread()
 
     def load_driver_data(self):
         try:
