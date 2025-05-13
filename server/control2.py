@@ -19,15 +19,12 @@ import pymysql
 from dbutils.pooled_db import PooledDB
 import threading
 
-SERIAL_PORT = '/dev/ttyACM0'
+SERIAL_PORT = "/dev/ttyACM0"
+SERIAL_PORT2 = "/dev/ttyACM1"
 BAUD_RATE = 9600
 TIMEOUT_S = 1.0
 
-SERIAL_PORT2 = "/dev/ttyACM2"
-BAUD_RATE2 = 9600
-TIMEOUT_S2 = 1.0
-
-TCP_SERVER_IP = '192.168.2.120'
+TCP_SERVER_IP = "192.168.2.120"
 TCP_SERVER_PORT = 12345
 
 PACKET_HEADER = 0xAA
@@ -114,41 +111,16 @@ def listen_response(sock, ser):
             print(f"[TCP Read Error] {e}")
             break
 
-def listen_extra_serial(ser_extra, ser_main):
-    while True:
-        try:
-            if ser_extra.in_waiting >= 3:
-                header = ser_extra.read(1)
-                if header[0] == 0x00:
-                    cmd_bytes = ser_extra.read(2)
-                    cmd = cmd_bytes.decode('ascii', errors='replace')
-                    if cmd:
-                        print(f"[SER2] Received MB packet: {header.hex()} {cmd_bytes}")
-
-                        packet = PACKET_HEADER + cmd_bytes + b'\x00'
-                        ser_main.write(packet)
-
-                        print("[SER2 → SER1] Forwarded MB packet to /dev/ttyACM0")
-                    else:
-                        print("There is no valid cmd.")
-                        
-        except Exception as e:
-            print(f"[SER2 ERROR] {e}")
-        time.sleep(0.05)
-
-
 def main():
     try:
         with serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=TIMEOUT_S) as ser, \
-            serial.Serial(SERIAL_PORT2, BAUD_RATE2, timeout=TIMEOUT_S2) as ser2, \
-            socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+             socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
 
             print("Connecting to TCP server...")
             sock.connect((TCP_SERVER_IP, TCP_SERVER_PORT))
             print("Connected to TCP server.")
 
             threading.Thread(target=listen_response, args=(sock, ser), daemon=True).start()
-            threading.Thread(target=listen_extra_serial, args=(ser2, ser), daemon=True).start()
 
             while True:
                 packet = read_aligned_packet(ser)
@@ -196,11 +168,12 @@ class RCController(QWidget):
 
         self.ser = None
         try:
-            self.ser = serial.Serial('/dev/ttyACM1', 9600, timeout=1)
-            print("Successfully connected to /dev/ttyACM1")
+            self.ser = serial.Serial(SERIAL_PORT2, BAUD_RATE, timeout=TIMEOUT_S)
+            self.ser2 = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=TIMEOUT_S)
+            print(f"Successfully connected to {SERIAL_PORT2} / {SERIAL_PORT}")
             time.sleep(1)
         except serial.SerialException as e:
-            print(f"Error opening serial port /dev/ttyACM1: {e}. Please check the connection and permissions.")
+            print(f"Error opening serial port {SERIAL_PORT2} / {SERIAL_PORT}: {e}. Please check the connection and permissions.")
 
         self.keys_pressed = set()
         self.speed = 150
@@ -230,6 +203,12 @@ class RCController(QWidget):
                     print(self.ser.readline(), 'MF')
                 elif Qt.Key.Key_S in self.keys_pressed:
                     self.ser.write(b'MB\n')
+
+                    packet = bytearray()
+                    packet.append(PACKET_HEADER)
+                    packet += b'MB'
+                    packet.append(0x00)
+                    self.ser2.write(packet)
                     print(self.ser.readline(), 'MB')
                 elif Qt.Key.Key_A in self.keys_pressed:
                     self.ser.write(b'TL\n')
@@ -239,6 +218,12 @@ class RCController(QWidget):
                     print(self.ser.readline(), 'TR')
                 else:
                     self.ser.write(b'MS\n')
+
+                    packet = bytearray()
+                    packet.append(PACKET_HEADER)
+                    packet += b'ST'
+                    packet.append(0x00)
+                    self.ser2.write(packet)
                     print(self.ser.readline(), 'MS')
 
                 # 속도 제어
