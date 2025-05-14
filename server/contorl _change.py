@@ -351,14 +351,14 @@ class OutsideDisplay(QWidget, out_window):
         
     def check_uid_queue(self):
         try:
-            if not uid_queue.empty():
+            if not uid_queue.empty() and self.open == False:
                 self.updateDisplay(uid_queue.queue)
 
         except queue.Empty:
             pass
 
     def updateDisplay(self, uid):
-        if any(pf == 0x01 for pf in list(uid)[:]) and self.open == False:
+        if any(pf == 0x01 for pf in list(uid)[:]):
             self.message = "Welcome Back"
             self.open = True
         # else:
@@ -376,7 +376,7 @@ class MainWindow(QWidget, main_window):
 
         self.power_on = False
         self.light_on = False
-        self.open = 1
+        self.alc_test = False
 
         # 타이머
         self.clock_timer = QTimer()
@@ -414,9 +414,6 @@ class MainWindow(QWidget, main_window):
 
         self.poll_data_from_thread2()
 
-        self.checkAuth()
-
-
     def update_time(self):
         self.time_edit.setText(QTime.currentTime().toString("hh:mm:ss"))
 
@@ -442,33 +439,39 @@ class MainWindow(QWidget, main_window):
 
     def poll_data_from_thread(self):
         try:
-            if any(cmd == "MB" for cmd in list(cmd_queue.queue)[:2]):
-                self.message = "You are Moving Backward"
-                self.main_edit.setText(self.message)
-                self.checkDist()
+            if self.power_on == False and self.alc_test == False: 
+                if self.checkAuth() == True:
+                    self.message = "Hello! Drive Safe"
+                    self.updateDisplay(self.message)
+                    self.alc_test = True
+                else:
+                    self.message = "You are DRUNK!!!"
+
             else:
-                self.main_edit.clear()
+                if any(cmd == "MB" for cmd in list(cmd_queue.queue)[:2]):
+                    self.message = "You are Moving Backward"
+                    self.main_edit.setText(self.message)
+                    self.checkDist()
+                    
+                else:
+                    self.main_edit.clear()
 
-            if self.checkLight == 1:
-                self.message = "HeadLight ON"
-                self.updateDisplay(self.message)
-            if self.checkLight == 2:
-                self.message = "HeadLight OFF" 
-                self.updateDisplay(self.message)
+                if self.checkLight == 1:
+                    self.message = "HeadLight ON"
+                    self.updateDisplay(self.message)
+                if self.checkLight == 2:
+                    self.message = "HeadLight OFF" 
+                    self.updateDisplay(self.message)
 
+                
+                
         except queue.Empty:
             pass
 
     def checkAuth(self):
         if any(pf == 'P' for pf in list(alc_queue.queue)[:]):
-            if self.power_on == False: 
-                self.message = "Hello! Drive Safe"
-                self.updateDisplay(self.message)
-
             return True
         else:
-            self.message = "You are DRUNK!!!"
-            self.updateDisplay(self.message)
             return False
         
     def checkDist(self):
