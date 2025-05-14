@@ -6,11 +6,8 @@ from PyQt6 import uic
 from PyQt6 import QtCore, QtGui
 from PyQt6.QtCore import *
 import time
-
 import queue
-
 # --- PC1: Serial to PC2 with DB insert and VF response handling ---
-
 import serial
 import struct
 import socket
@@ -18,22 +15,18 @@ import time
 import pymysql
 from dbutils.pooled_db import PooledDB
 import threading
-
 SERIAL_PORT = "/dev/ttyACM0"
 SERIAL_PORT2 = "/dev/ttyACM1"
 BAUD_RATE = 9600
 TIMEOUT_S = 1.0
-
 TCP_SERVER_IP = "192.168.2.120"
 TCP_SERVER_PORT = 12345
-
 PACKET_HEADER = 0xAA
 DB_PACKET_SIZE = 15 # 1(header) + 2(command) + 4(uid) + 8(floats)
 VF_PACKET_SIZE = 7
 VF_RESPONSE_SIZE = 4 # 1(header) + 2(command) + 1(VF_RESP)
 LS_PACKET_SIZE = 4 # 1(header) + 2(command) + 1(VF_RESP)
 UR_PACKET_SIZE = 7
-
 temp_queue = queue.Queue()
 shock_queue = queue.Queue()
 cmd_queue = queue.Queue(maxsize=2)
@@ -53,10 +46,8 @@ db_pool = PooledDB(
     charset="utf8mb4",
     autocommit=True
 )
-
 def get_db_connection():
     return db_pool.connection()
-
 def insert_to_db(uid_hex, shock, temp):
     try:
         conn = get_db_connection()
@@ -66,7 +57,6 @@ def insert_to_db(uid_hex, shock, temp):
         print(f"[DB ERROR] {e}")
     finally:
         conn.close()
-
 def read_aligned_packet(ser):
     while True:
         byte = ser.read(1)
@@ -88,36 +78,28 @@ def read_aligned_packet(ser):
                 lookahead = ser.read(1)
                 if not lookahead:
                     continue
-
                 # 응답이면 (1바이트 추가만 있음 → 총 4바이트)
                 if ser.in_waiting == 0:
                     packet = byte + cmd_bytes + lookahead
                     print(f"[RECV] VF Response: {packet.hex().upper()}")
-                    
                     alc_queue.put(lookahead[0])
-
                 # 아니면 요청 (나머지 3바이트 추가로 읽기 → 총 7바이트)
                 rest = ser.read(3)
                 if len(rest) == 3:
                     packet = byte + cmd_bytes + lookahead + rest
                     print(f"[RECV] VF Request: {packet.hex().upper()}")
                     return packet
-                
             elif command == "LS":
                 rest = ser.read(LS_PACKET_SIZE - 3)
                 if len(rest) == DB_PACKET_SIZE - 3:
                     ls_queue.put(rest[0])
 
-            
             elif command == "UR":
                 rest = ser.read(UR_PACKET_SIZE - 3)
                 if len(rest) == DB_PACKET_SIZE - 3:
                     ur_queue.put(rest[0])
-                    
-
         else:
             continue
-
 def listen_response(sock, ser):
     while True:
         try:
@@ -127,49 +109,38 @@ def listen_response(sock, ser):
                 if command == "VF":
                     print(f"[RESP] VF response from PC2: {resp}")
                     ser.write(resp)
-
-
             # 큐에서 명령을 확인하고, "MB"가 있으면 "MB"를 전송하고, 없으면 "ST"를 전송
             if not cmd_queue.empty():
                 # 큐에서 모든 명령을 확인
                 queue_items = []
                 while not cmd_queue.empty():
                     queue_items.append(cmd_queue.get_nowait())
-
                 # "MB"가 있으면 "MB" 보내기, 없으면 "ST" 보내기
                 packet = bytearray()
                 packet.append(PACKET_HEADER)
-                
                 if "MB" in queue_items:
                     packet += b'MB'
                 else:
                     packet += b'ST'
-
                 packet.append(0x00)  # 명령의 끝 부분을 0x00으로 설정
                 ser.write(packet)
                 print(f"[CMD] Sent: {packet.hex()}")
         except Exception as e:
             print(f"[TCP Read Error] {e}")
             break
-
 def main():
     try:
         with serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=TIMEOUT_S) as ser, \
              socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-
             print("Connecting to TCP server...")
             sock.connect((TCP_SERVER_IP, TCP_SERVER_PORT))
             print("Connected to TCP server.")
-
             threading.Thread(target=listen_response, args=(sock, ser), daemon=True).start()
-
             while True:
                 packet = read_aligned_packet(ser)
                 if not packet or len(packet) not in (DB_PACKET_SIZE, VF_PACKET_SIZE):
                     continue
-
                 command = packet[1:3].decode("ascii", errors="replace")
-
                 if command == "DB":
                     uid_hex = packet[3:7].hex().upper()
                     shock = struct.unpack('<f', packet[7:11])[0]
@@ -178,12 +149,9 @@ def main():
                     shock_queue.put(f"{shock:.2f}")
                     temp_queue.put(f"{temp:.2f}")
                     print(f"[PC1] Stored DB: Shock={shock:.2f}, Temp={temp:.2f}")
-
                 sock.sendall(packet)
                 print(f"[PC1] Forwarded {command} to PC2")
-
                 time.sleep(0.01)
-
     except KeyboardInterrupt:
         print("\n[PC1] Exiting.")
     except Exception as e:
@@ -355,6 +323,7 @@ class MainWindow(QWidget, main_window):
         self.setWindowTitle("Main")
 
         self.power_on = False
+        self.light_on = False
 
         # 타이머
         self.clock_timer = QTimer()
@@ -375,6 +344,8 @@ class MainWindow(QWidget, main_window):
         self.data_poll_timer = QTimer()
         self.data_poll_timer.timeout.connect(self.poll_data_from_thread)
         self.data_poll_timer.start(5000)
+
+        self.message_manager = MessageManager(self.main_edit)
 
         self.updateDisplay()
 
@@ -404,19 +375,98 @@ class MainWindow(QWidget, main_window):
         self.info_window.show()
         self.hide()
 
-    def updateDisplay(self, message='Waiting for update'):
+    def updateDisplay(self, message):
+        self.message_manager.show_message(message)
+
         self.main_edit.setText(message)
         QTimer.singleShot(3000, self.main_edit.clear)
 
-    # def poll_data_from_thread(self):
-    #     try:
-    #         shock = shock_queue.get_nowait()
-    #         shock.get()
-    #         temp = temp.queue.get_nowait()
-    #         temp.get()
-    #         self.updateDisplay(f"{shock}times \n {temp}°C")
-    #     except queue.Empty:
-    #         pass
+    def poll_data_from_thread(self):
+        try:
+            if cmd_queue.queue[0] == "MB" or cmd_queue.queue[1] == "MB":
+                message = "You are Moving Backward"
+                dist = ur_queue.get_nowiat()
+                self.main_edit.setText(message)
+            else:
+                self.main_edit.clear()
+
+            if self.checkLight == 1:
+                message = "HeadLight ON"
+            if self.checkLight == 2:
+                message = "HeadLight OFF"
+
+            else:
+                if self.checkAuth() == True:
+                    message = "Hello! Drive Safe"
+                else:
+                    message = "You are DRUNK!!!"
+                dist = ur_queue.get_nowait()
+
+            self.updateDisplay()
+            
+        except queue.Empty:
+            pass
+
+    def checkAuth(self):
+        auth = alc_queue.get_nowait()
+
+        if auth == 0x01:
+            return True
+        else:
+            return False
+
+    def checkDist(self):
+        if ur_queue <= 10:
+            return 10
+
+    def checkLight(self):
+        if ls_queue == 0x01:
+            if self.light_on == False:
+                self.light_on = True
+                return 1
+        else:
+            if self.light_on == True:
+                self.light_on = False
+                return 2
+            
+class MessageManager:
+    def __init__(self, text_edit: QTextEdit):
+        self.text_edit = text_edit
+        self.message_queue = []
+        self.current_message = None
+
+        self.display_timer = QTimer()
+        self.display_timer.setSingleShot(True)
+        self.display_timer.timeout.connect(self.remove_current_message)
+
+    def show_message(self, msg: str):
+        if self.current_message is None:
+            # 현재 표시 중인 메시지가 없으면 바로 표시
+            self.current_message = msg
+            self.text_edit.setPlainText(msg)
+            self.display_timer.start(3000)
+        else:
+            # 표시 중이면 큐에 추가하고 두 줄로 출력
+            self.message_queue.append(msg)
+            self._refresh_display()
+
+    def remove_current_message(self):
+        # 현재 메시지 제거
+        if self.message_queue:
+            # 대기 메시지 있으면 교체
+            self.current_message = self.message_queue.pop(0)
+            self._refresh_display()
+            self.display_timer.start(3000)
+        else:
+            # 없으면 모두 지움
+            self.current_message = None
+            self.text_edit.clear()
+
+    def _refresh_display(self):
+        lines = [self.current_message] if self.current_message else []
+        if self.message_queue:
+            lines.append(self.message_queue[0])
+        self.text_edit.setPlainText("\n".join(lines))
 
 class StatusWindow(QWidget, status_window):
     def __init__(self, parent):
@@ -425,8 +475,6 @@ class StatusWindow(QWidget, status_window):
         self.setWindowTitle("Status")
         self.parent = parent
 
-        # self.temp_edit.setText("--°C")
-        # self.shock_edit.setText("-- times")
         self.updateStatus(0, 0)
 
         # 데이터 들어있는 queue 주기적으로 체크
@@ -447,7 +495,7 @@ class StatusWindow(QWidget, status_window):
             shock = shock_queue.get_nowait()
             temp = temp_queue.get_nowait()
             self.updateStatus(shock, temp)
-            shock_queue.empty() # queue를 비우려는 목적인가요
+
         except queue.Empty:
             pass
 
@@ -500,7 +548,7 @@ class InfoWindow(QWidget,info_window):
             shock = shock_queue.get_nowait()
             temp = temp.queue.get_nowait()
             self.updateDisplay(f"{shock}times \n {temp}°C")
-            shock_queue.empty() # queue를 비우려는 목적인가요
+
         except queue.Empty:
             pass
 
