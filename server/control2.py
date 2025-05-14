@@ -236,7 +236,8 @@ class RCController(QWidget):
                         check = False
 
                 elif Qt.Key.Key_S in self.keys_pressed:
-                    self.ser.write(b'MB\n')
+                    if self.checkDist():
+                        self.ser.write(b'MB\n')
                     # print(self.ser.readline(), 'MB')
 
                     check = True
@@ -319,6 +320,14 @@ class RCController(QWidget):
             return True
         else:
             return False
+        
+    def checkDist(self):
+        dist = int(ur_queue.queue[3:])
+        
+        if (dist <= 10):
+            return False
+        else:
+            True
         
 class OutsideDisplay(QWidget, out_window):
 
@@ -421,9 +430,6 @@ class MainWindow(QWidget, main_window):
     def updateDisplay(self, message):
         self.message_manager.show_message(message)
 
-        # self.main_edit.setText(message)
-        # QTimer.singleShot(3000, self.main_edit.clear)
-
     def poll_data_from_thread(self):
         try:
             if self.power_on == False:  
@@ -460,7 +466,7 @@ class MainWindow(QWidget, main_window):
             return False
 
     def checkDist(self):
-        dist = int(ur_queue[3:])
+        dist = int(ur_queue.queue[3:])
 
         self.updateDisplay(dist)
 
@@ -492,7 +498,7 @@ class MessageManager:
             # 현재 표시 중인 메시지가 없으면 바로 표시
             self.current_message = msg
             self.text_edit.setPlainText(msg)
-            self.display_timer.start(3000)
+            self.display_timer.start(2000)
         else:
             # 표시 중이면 큐에 추가하고 두 줄로 출력
             self.message_queue.append(msg)
@@ -504,7 +510,7 @@ class MessageManager:
             # 대기 메시지 있으면 교체
             self.current_message = self.message_queue.pop(0)
             self._refresh_display()
-            self.display_timer.start(3000)
+            self.display_timer.start(2000)
         else:
             # 없으면 모두 지움
             self.current_message = None
