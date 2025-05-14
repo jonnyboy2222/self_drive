@@ -96,7 +96,7 @@ void loop() {
 
     char send_buffer_db[DB_PACKET_SIZE];
 
-    shockVal = shockManager.getLatestAverageShock();
+    shockVal = shockManager.getCountInWindow();
     tempVal = tempManager.getCurrentTemperature();
 
     send_buffer_db[0] = PACKET_HEADER;
