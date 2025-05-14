@@ -16,8 +16,8 @@ import pymysql
 from dbutils.pooled_db import PooledDB
 import threading
 
-SERIAL_PORT = "/dev/ttyACM0"
-SERIAL_PORT2 = "/dev/ttyACM1"
+SERIAL_PORT = "/dev/ttyACM1"
+SERIAL_PORT2 = "/dev/ttyACM0"
 
 BAUD_RATE = 9600
 TIMEOUT_S = 1.0
@@ -174,11 +174,12 @@ def main():
 MAIN_UI = "/home/john/dev_ws/yolo/main.ui"
 STATUS_UI = "/home/john/dev_ws/yolo/status.ui"
 INFO_UI = "/home/john/dev_ws/yolo/info.ui"
-OUT_DISP_UI = "/home/john/dev_ws/yolo/out_disp.ui"
+OUT_DISP_UI = "/home/john/dev_ws/yolo/outside_disp.ui"
 
 main_window = uic.loadUiType(MAIN_UI)[0]
 status_window = uic.loadUiType(STATUS_UI)[0]
 info_window = uic.loadUiType(INFO_UI)[0]
+out_window = uic.loadUiType(OUT_DISP_UI)[0]
 
 class RCController(QWidget):
     def __init__(self):
@@ -216,7 +217,7 @@ class RCController(QWidget):
             print("Serial port /dev/ttyACM1 not available. Cannot send command.")
             return 
         try:
-            if (self.checkAuth() == True) and (engine_queue.get_nowait() == "ON"):
+            if (self.checkAuth() == True) and (self.checkEngine() == True):
                 # 모터 제어 (전진/후진)
                 if Qt.Key.Key_W in self.keys_pressed:
                     self.ser.write(b'MF\n')
@@ -307,29 +308,31 @@ class RCController(QWidget):
             return True
         else:
             return False
+    
+    def checkEngine(self):
+        if any(pf == 'ON' for pf in list(engine_queue.queue)[:]):
+            return True
+        else:
+            return False
         
-class OutsideDisplay(QWidget):
+class OutsideDisplay(QWidget, out_window):
 
     def __init__(self):
         super().__init__()
         self.setupUi(self)
 
         self.setWindowTitle("Outside Display")
+        
+        self.updateDisplay()
 
-    def updateDisplay(self, message):
-        if self.checkAuth():
+    def updateDisplay(self):
+        if any(pf == 0x01 for pf in list(uid_queue.queue)[:]):
             message = "Welcome Back"
         else:
             message = "Wrong UID"
 
         self.display.setText(message)
         QTimer.singleShot(3000, self.display.clear)
-
-    def checkAuth(self):
-        if uid_queue == 0x01:
-            return True
-        else:
-            return False
 
 class MainWindow(QWidget, main_window):
     def __init__(self):
