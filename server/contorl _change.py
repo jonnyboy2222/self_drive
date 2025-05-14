@@ -16,6 +16,8 @@ import pymysql
 from dbutils.pooled_db import PooledDB
 import threading
 
+from collections import deque
+
 SERIAL_PORT = "/dev/ttyACM0"
 SERIAL_PORT2 = "/dev/ttyACM1"
 
@@ -329,6 +331,7 @@ class RCController(QWidget):
                 return False
             else:
                 return True
+            
         except queue.Empty:
             pass
         
