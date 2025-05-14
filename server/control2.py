@@ -322,7 +322,7 @@ class RCController(QWidget):
             return False
         
     def checkDist(self):
-        dist = int(ur_queue.queue[3:])
+        dist = ur_queue.queue[3:]
 
         if (dist <= 10):
             return False
@@ -433,11 +433,11 @@ class MainWindow(QWidget, main_window):
 
     def poll_data_from_thread(self):
         try:
-            if self.power_on == False:  
+            if self.power_on == False: 
                 if self.checkAuth() == True:
                     self.message = "Hello! Drive Safe"
-                else:
-                    self.message = "You are DRUNK!!!"
+                # else:
+                #     self.message = "You are DRUNK!!!"
 
                 self.updateDisplay(self.message)
 
@@ -474,7 +474,7 @@ class MainWindow(QWidget, main_window):
 
         if (dist <= 10):
             self.updateDisplay("WARNING : Too close")
-        elif (dist < tmep):
+        elif (dist < temp):
             self.updateDisplay("Getting Closer")
 
         temp = dist
