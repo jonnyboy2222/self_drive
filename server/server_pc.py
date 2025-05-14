@@ -6,6 +6,7 @@ import threading
 import pymysql
 from dbutils.pooled_db import PooledDB
 import json
+import datetime
 
 TCP_SERVER_IP = '0.0.0.0'
 TCP_SERVER_PORT = 12345
@@ -34,11 +35,11 @@ db_pool = PooledDB(
 def get_db_connection():
     return db_pool.connection()
 
-def insert_to_db(shock, temp):
+def insert_to_db(uid_hex, shock, temp):
     try:
         conn = get_db_connection()
         with conn.cursor() as cur:
-            cur.execute("INSERT INTO sensor_data (shock, temperature) VALUES (%s, %s)", (shock, temp))
+            cur.execute("INSERT INTO sensor_data (uid, shock, temperature) VALUES (%s, %s)", (uid_hex, shock, temp))
     except Exception as e:
         print(f"[DB ERROR] {e}")
     finally:
@@ -65,7 +66,7 @@ def handle_client(conn, addr):
                 uid_hex = rest[0:4].hex().upper()
                 shock = struct.unpack('<f', rest[4:8])[0]
                 temp = struct.unpack('<f', rest[8:12])[0]
-                insert_to_db(shock, temp)
+                insert_to_db(uid_hex, shock, temp)
                 print(f"[PC2] Stored DB: UID={uid_hex}, Shock={shock:.2f}, Temp={temp:.2f}")
 
             elif command == "VF":
@@ -78,7 +79,7 @@ def handle_client(conn, addr):
 
                 try:
                     with db_pool.connection() as conn_db, conn_db.cursor() as cur:
-                        cur.execute("SELECT EXISTS(SELECT 1 FROM user_uid WHERE uid = %s)", (uid_hex,))
+                        cur.execute("SELECT EXISTS(SELECT 1 FROM user WHERE uid = %s)", (uid_hex,))
                         exists = cur.fetchone()[0]
                         result = 1 if exists else 0
                 except Exception as e:
@@ -112,7 +113,7 @@ def handle_client(conn, addr):
                         print(f"[PC2][JSON-VERIFICATION] UID={uid}")
 
                         with db_pool.connection() as conn_db, conn_db.cursor() as cur:
-                            cur.execute("SELECT EXISTS(SELECT 1 FROM user_uid WHERE uid = %s)", (uid,))
+                            cur.execute("SELECT EXISTS(SELECT 1 FROM user WHERE uid = %s)", (uid,))
                             exists = cur.fetchone()[0]
                             result_msg = {"message": "PASS" if exists else "FAIL"}
                             conn.sendall(json.dumps(result_msg).encode("utf-8"))
@@ -123,7 +124,7 @@ def handle_client(conn, addr):
                         try:
                             with db_pool.connection() as conn_db, conn_db.cursor() as cur:
                                 cur.execute("""
-                                    INSERT INTO rfid_users (uid, name, birth_date, height, weight, phone_num, license_num)
+                                    INSERT INTO user (uid, user_name, birth_date, height, weight, phone_num, license_num)
                                     VALUES (%s, %s, %s, %s, %s, %s, %s)
                                 """, (
                                     json_data.get("rfid_uid"),
@@ -134,11 +135,11 @@ def handle_client(conn, addr):
                                     json_data.get("phone_num"),
                                     json_data.get("license_num")
                                 ))
-                                conn.sendall(json.dumps({"message": "STORED"}).encode("utf-8"))
+                                conn.sendall(json.dumps({"message": "PASS"}).encode("utf-8"))
                                 print(f"[PC2] Stored user: {json_data}")
                         except Exception as e:
                             print(f"[PC2][DB-INSERT ERROR] {e}")
-                            conn.sendall(json.dumps({"message": "ERROR"}).encode("utf-8"))
+                            conn.sendall(json.dumps({"message": "FAIL"}).encode("utf-8"))
 
                 except Exception as e:
                     print(f"[PC2][JSON ERROR] {e}")
