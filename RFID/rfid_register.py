@@ -104,7 +104,7 @@ class WindowClass(QMainWindow, from_class):
                     else:
                         QMessageBox.warning(
                             self, "등록 오류", "모든 데이터가 이미 등록되어 있습니다.") 
-                        existing_user = dict(list(res_json.items())[3:])
+                        existing_user = res_json.get("user_data")
                         self.labelStatus.setText("초기화 버튼을 누른 뒤 다시 등록해주세요.")
                         # 모든 행 제거
                         self.tableWidget.setRowCount(0)

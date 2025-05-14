@@ -25,9 +25,9 @@ db_pool = PooledDB(
     maxconnections=5,
     mincached=2,
     host="localhost",
-    user="root",
-    password="4582",
-    database="johnbase",
+    user="kth",
+    password="th0708csi!",
+    database="car_db",
     charset="utf8mb4",
     autocommit=True
 )
@@ -115,7 +115,21 @@ def handle_client(conn, addr):
                         with db_pool.connection() as conn_db, conn_db.cursor() as cur:
                             cur.execute("SELECT EXISTS(SELECT 1 FROM user WHERE uid = %s)", (uid,))
                             exists = cur.fetchone()[0]
-                            result_msg = {"message": "PASS" if exists else "FAIL"}
+
+                            #result_msg = {"message": "PASS" if exists else "FAIL"}
+                            if exists:
+                                cur.execute("SELECT * FROM user WHERE uid = %s", (uid,))
+                                existing_user = cur.fetchone()
+                                # 컬럼 이름 가져오기
+                                columns = [desc[0] for desc in cur.description]
+                                # 컬럼과 값을 딕셔너리로 변환
+                                user_data = dict(zip(columns, existing_user))
+                                result_msg = {
+                                    "message": "PASS",
+                                    "user_data": user_data
+                                }
+                            else:
+                                result_msg = {"message": "FAIL"}
                             conn.sendall(json.dumps(result_msg).encode("utf-8"))
                             print(f"[PC2] Sent verification result: {result_msg}")
 
