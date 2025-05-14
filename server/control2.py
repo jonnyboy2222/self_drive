@@ -322,11 +322,22 @@ class OutsideDisplay(QWidget, out_window):
         self.setupUi(self)
 
         self.setWindowTitle("Outside Display")
-        
-        self.updateDisplay()
 
-    def updateDisplay(self):
-        if any(pf == 0x01 for pf in list(uid_queue.queue)[:]):
+        self.uid_check_timer = QTimer()
+        self.uid_check_timer.timeout.connect(self.check_uid_queue)
+        self.uid_check_timer.start(1000)  # 1초마다 확인
+        
+    def check_uid_queue(self):
+        try:
+            if not uid_queue.empty():
+                uid = uid_queue.get_nowait()
+                self.updateDisplay(uid)
+
+        except queue.Empty:
+            pass
+
+    def updateDisplay(self, uid):
+        if any(pf == 0x01 for pf in list(uid)[:]):
             message = "Welcome Back"
         else:
             message = "Wrong UID"
