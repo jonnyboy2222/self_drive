@@ -323,11 +323,12 @@ class RCController(QWidget):
         
     def checkDist(self):
         dist = int(ur_queue.queue[3:])
-        
+
         if (dist <= 10):
             return False
         else:
             True
+
         
 class OutsideDisplay(QWidget, out_window):
 
@@ -469,9 +470,14 @@ class MainWindow(QWidget, main_window):
         dist = int(ur_queue.queue[3:])
 
         self.updateDisplay(dist)
+        temp = 0
 
         if (dist <= 10):
             self.updateDisplay("WARNING : Too close")
+        elif (dist < tmep):
+            self.updateDisplay("Getting Closer")
+
+        temp = dist
 
     def checkLight(self):
         if ls_queue == 0x01:
