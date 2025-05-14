@@ -594,6 +594,9 @@ if __name__ == "__main__":
     window1 = RCController()
     window1.show()
 
+    window2 = OutsideDisplay()
+    window2.show()
+
     window = MainWindow()
     window.show()
     
