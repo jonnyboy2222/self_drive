@@ -38,6 +38,9 @@ cmd_queue = queue.Queue(maxsize=2)
 alc_queue = queue.Queue()
 ls_queue = queue.Queue()
 ur_queue = queue.Queue()
+uid_queue = queue.Queue()
+engine_queue = queue.Queue()
+
 
 # Database connection pool
 db_pool = PooledDB(
@@ -51,6 +54,7 @@ db_pool = PooledDB(
     charset="utf8mb4",
     autocommit=True
 )
+
 def get_db_connection():
     return db_pool.connection()
 def insert_to_db(uid_hex, shock, temp):
@@ -114,6 +118,7 @@ def listen_response(sock, ser):
                 if command == "VF":
                     print(f"[RESP] VF response from PC2: {resp}")
                     ser.write(resp)
+                    uid_queue.put(resp[3])
             # 큐에서 명령을 확인하고, "MB"가 있으면 "MB"를 전송하고, 없으면 "ST"를 전송
             if not cmd_queue.empty():
                 # 큐에서 모든 명령을 확인
@@ -169,6 +174,7 @@ def main():
 MAIN_UI = "/home/john/dev_ws/yolo/main.ui"
 STATUS_UI = "/home/john/dev_ws/yolo/status.ui"
 INFO_UI = "/home/john/dev_ws/yolo/info.ui"
+OUT_DISP_UI = "/home/john/dev_ws/yolo/out_disp.ui"
 
 main_window = uic.loadUiType(MAIN_UI)[0]
 status_window = uic.loadUiType(STATUS_UI)[0]
@@ -210,7 +216,7 @@ class RCController(QWidget):
             print("Serial port /dev/ttyACM1 not available. Cannot send command.")
             return 
         try:
-            if self.checkAuth() == True:
+            if (self.checkAuth() == True) and (engine_queue.get_nowait() == "ON"):
                 # 모터 제어 (전진/후진)
                 if Qt.Key.Key_W in self.keys_pressed:
                     self.ser.write(b'MF\n')
@@ -301,26 +307,29 @@ class RCController(QWidget):
             return True
         else:
             return False
+        
+class OutsideDisplay(QWidget):
 
+    def __init__(self):
+        super().__init__()
+        self.setupUi(self)
 
+        self.setWindowTitle("Outside Display")
 
+    def updateDisplay(self, message):
+        if self.checkAuth():
+            message = "Welcome Back"
+        else:
+            message = "Wrong UID"
 
-# class SensorWorker(QObject):
-#     data_updated = pyqtSignal(float, float, bool)
+        self.display.setText(message)
+        QTimer.singleShot(3000, self.display.clear)
 
-#     def __init__(self):
-#         super().__init__()
-#         self._running = True
-
-#     def run(self):
-#         value = 0
-#         while self._running:
-#             value += 1
-#             self.data_updated.emit(value)
-#             time.sleep(1)
-
-#     def stop(self):
-#         self._running = False
+    def checkAuth(self):
+        if uid_queue == 0x01:
+            return True
+        else:
+            return False
 
 class MainWindow(QWidget, main_window):
     def __init__(self):
@@ -354,7 +363,7 @@ class MainWindow(QWidget, main_window):
 
         self.message_manager = MessageManager(self.main_edit)
 
-        self.updateDisplay()
+        self.main_edit.setText("")
 
     def update_time(self):
         self.time_edit.setText(QTime.currentTime().toString("hh:mm:ss"))
@@ -365,10 +374,14 @@ class MainWindow(QWidget, main_window):
             self.power_btn.setText("OFF")
             self.status_btn.setEnabled(True)
             self.info_btn.setEnabled(True)
+            self.updateDisplay("Engine ON \n Drive Safe")
+            engine_queue.put("ON")
         else:
             self.power_btn.setText("ON")
             self.status_btn.setEnabled(False)
             self.info_btn.setEnabled(False)
+            self.updateDisplay("Hope to see you again")
+            engine_queue.put("OFF")
 
     def show_status(self):
         self.status_window = StatusWindow(self)
@@ -380,11 +393,11 @@ class MainWindow(QWidget, main_window):
         self.info_window.show()
         self.hide()
 
-    def updateDisplay(self, message="Drive Safe"):
+    def updateDisplay(self, message):
         self.message_manager.show_message(message)
 
-        self.main_edit.setText(message)
-        QTimer.singleShot(3000, self.main_edit.clear)
+        # self.main_edit.setText(message)
+        # QTimer.singleShot(3000, self.main_edit.clear)
 
     def poll_data_from_thread(self):
         try:
