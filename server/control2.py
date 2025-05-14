@@ -221,7 +221,7 @@ class RCController(QWidget):
                 # 모터 제어 (전진/후진)
                 if Qt.Key.Key_W in self.keys_pressed:
                     self.ser.write(b'MF\n')
-                    print(self.ser.readline(), 'MF')
+                    # print(self.ser.readline(), 'MF')
 
                     check = True
                     if cmd_queue.full():
@@ -232,7 +232,7 @@ class RCController(QWidget):
 
                 elif Qt.Key.Key_S in self.keys_pressed:
                     self.ser.write(b'MB\n')
-                    print(self.ser.readline(), 'MB')
+                    # print(self.ser.readline(), 'MB')
 
                     check = True
                     if cmd_queue.full():
@@ -243,7 +243,7 @@ class RCController(QWidget):
 
                 elif Qt.Key.Key_A in self.keys_pressed:
                     self.ser.write(b'TL\n')
-                    print(self.ser.readline(), 'TL')
+                    # print(self.ser.readline(), 'TL')
 
                     check = True
                     if cmd_queue.full():
@@ -254,7 +254,7 @@ class RCController(QWidget):
 
                 elif Qt.Key.Key_D in self.keys_pressed:
                     self.ser.write(b'TR\n')
-                    print(self.ser.readline(), 'TR')
+                    # print(self.ser.readline(), 'TR')
 
                     check = True
                     if cmd_queue.full():
@@ -265,7 +265,7 @@ class RCController(QWidget):
 
                 else:
                     self.ser.write(b'MS\n')
-                    print(self.ser.readline(), 'MS')
+                    # print(self.ser.readline(), 'MS')
 
                     check = True
                     if cmd_queue.full():
@@ -421,27 +421,30 @@ class MainWindow(QWidget, main_window):
 
     def poll_data_from_thread(self):
         try:
-            if any(cmd == "MB" for cmd in list(cmd_queue.queue)[:2]):
-                message = "You are Moving Backward"
-                dist = ur_queue.get_nowait()
-                self.main_edit.setText(message)
-            else:
-                self.main_edit.clear()
-
-            if self.checkLight == 1:
-                message = "HeadLight ON"
-            if self.checkLight == 2:
-                message = "HeadLight OFF"
-
-            else:
+            if self.power_on == False:  
                 if self.checkAuth() == True:
                     message = "Hello! Drive Safe"
                 else:
                     message = "You are DRUNK!!!"
-                dist = ur_queue.get_nowait()
 
-            self.updateDisplay()
-            
+                self.updateDisplay(message)
+
+            else:
+                if any(cmd == "MB" for cmd in list(cmd_queue.queue)[:2]):
+                    message = "You are Moving Backward"
+                    self.main_edit.setText(message)
+                    self.checkDist()
+                    
+                else:
+                    self.main_edit.clear()
+
+                if self.checkLight == 1:
+                    message = "HeadLight ON"
+                if self.checkLight == 2:
+                    message = "HeadLight OFF" 
+
+                self.updateDisplay(message)
+                
         except queue.Empty:
             pass
 
