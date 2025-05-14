@@ -326,19 +326,21 @@ class OutsideDisplay(QWidget, out_window):
         self.uid_check_timer = QTimer()
         self.uid_check_timer.timeout.connect(self.check_uid_queue)
         self.uid_check_timer.start(1000)  # 1초마다 확인
+
+        self.open = False
         
     def check_uid_queue(self):
         try:
             if not uid_queue.empty():
-                uid = uid_queue.get_nowait()
-                self.updateDisplay(uid)
+                self.updateDisplay(uid_queue)
 
         except queue.Empty:
             pass
 
     def updateDisplay(self, uid):
-        if any(pf == 0x01 for pf in list(uid)[:]):
+        if any(pf == 0x01 for pf in list(uid)[:]) and self.open == False:
             message = "Welcome Back"
+            self.open = True
         else:
             message = "Wrong UID"
 
@@ -378,6 +380,10 @@ class MainWindow(QWidget, main_window):
         self.message_manager = MessageManager(self.main_edit)
 
         self.main_edit.setText("")
+
+        if self.power_on:
+            self.poll_data_from_thread()
+
 
     def update_time(self):
         self.time_edit.setText(QTime.currentTime().toString("hh:mm:ss"))
@@ -422,7 +428,6 @@ class MainWindow(QWidget, main_window):
             else:
                 self.main_edit.clear()
 
-
             if self.checkLight == 1:
                 message = "HeadLight ON"
             if self.checkLight == 2:
@@ -447,8 +452,12 @@ class MainWindow(QWidget, main_window):
             return False
 
     def checkDist(self):
-        if ur_queue <= 10:
-            return 10
+        dist = int(ur_queue[3:])
+
+        self.updateDisplay(dist)
+
+        if (dist <= 10):
+            self.updateDisplay("WARNING : Too close")
 
     def checkLight(self):
         if ls_queue == 0x01:
