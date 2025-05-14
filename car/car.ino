@@ -59,8 +59,14 @@ const int DB_PACKET_SIZE = 1 + 2 + 4 + sizeof(float) * 2; // 1(header) + 2(comma
 const char CMD_LIGHT_STATE[] = "LS";
 const int LS_PACKET_SIZE = 1 + 2 + 1; // 1(header) + 2(command) + 1(boolean)
 
+const char CMD_ULTRA_SONIC[] = "UR";
+const int UR_PACKET_SIZE = 1 + 2 + 4; // 1(header) + 2(command) + 4(float)
+
 bool lightState;
 float ultrasonic;
+
+float shockVal = 0;
+float tempVal = 0;
 
 
 void setup() {
@@ -72,6 +78,7 @@ void setup() {
   obstacleManager.begin();
   tempManager.begin();
   shockManager.begin();
+  rfidManager.begin();
 }
 
 void loop() {
@@ -81,6 +88,7 @@ void loop() {
   obstacleManager.update();
   tempManager.update();
   shockManager.update();
+  rfidManager.update();
   
   if ( currentTime - lastSendTime >= SendInterval)
   {
@@ -88,13 +96,16 @@ void loop() {
 
     char send_buffer_db[DB_PACKET_SIZE];
 
-    send_buffer[0] = PACKET_HEADER;
-    memcpy(send_buffer + 1, CMD_STORE_DATA, 2);
-    memcpy(send_buffer + 3, UID, 4);
-    memcpy(send_buffer + 7, &shockManager.getLatestAverageShock(), sizeof(float));
-    memcpy(send_buffer + 11, &tempManager.getCurrentTemperature(), sizeof(float));
+    shockVal = shockManager.getLatestAverageShock();
+    tempVal = tempManager.getCurrentTemperature();
 
-    Serial.write((const uint8_t*)send_buffer, DB_PACKET_SIZE);
+    send_buffer_db[0] = PACKET_HEADER;
+    memcpy(send_buffer_db + 1, CMD_STORE_DATA, 2);
+    memcpy(send_buffer_db + 3, rfidManager.getUIDBytes(), 4);
+    memcpy(send_buffer_db + 7, &shockVal, sizeof(float));
+    memcpy(send_buffer_db + 11, &tempVal, sizeof(float));
+
+    Serial.write((const uint8_t*)send_buffer_db, DB_PACKET_SIZE);
   }
   // 수신 처리
 
@@ -102,15 +113,15 @@ void loop() {
   if (lightState == true) {
     char send_buffer_ls[LS_PACKET_SIZE];
 
-    send_buffer[0] = PACKET_HEADER;
-    memcpy(send_buffer + 1, CMD_LIGHT_STATE, 2);
-    memcpy(send_buffer + 3, &lightState, 1);
+    send_buffer_ls[0] = PACKET_HEADER;
+    memcpy(send_buffer_ls + 1, CMD_LIGHT_STATE, 2);
+    memcpy(send_buffer_ls + 3, &lightState, 1);
 
-    Serial.write((const uint8_t*)send_buffer, LS_PACKET_SIZE);
+    Serial.write((const uint8_t*)send_buffer_ls, LS_PACKET_SIZE);
   }
 
-  ultrasonic = obstacleManager.getAvgDistance();
-  if ()
+  // ultrasonic = obstacleManager.getAvgDistance();
+  // if ()
 
 
   while (Serial.available()) {
@@ -128,9 +139,13 @@ void loop() {
           authManager.handleResponse(false);
         }
       } else if (recv_buffer[1] == 'M' && recv_buffer[2] == 'B') {
-
+        ultrasonic = obstacleManager.getAvgDistance();
+        char send_buffer_ur[UR_PACKET_SIZE];
+        send_buffer_ur[0] = PACKET_HEADER;
+        memcpy(send_buffer_ur + 1, CMD_ULTRA_SONIC, 2);
+        memcpy(send_buffer_ur + 3, &ultrasonic, 4);
+        Serial.write((const uint8_t*)send_buffer_ur, UR_PACKET_SIZE);
       } else if (recv_buffer[1] == 'S' && recv_buffer[2] == 'T') {
-        
       }
       idx = 0;
     }
