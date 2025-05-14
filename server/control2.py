@@ -15,18 +15,23 @@ import time
 import pymysql
 from dbutils.pooled_db import PooledDB
 import threading
+
 SERIAL_PORT = "/dev/ttyACM0"
 SERIAL_PORT2 = "/dev/ttyACM1"
+
 BAUD_RATE = 9600
 TIMEOUT_S = 1.0
-TCP_SERVER_IP = "192.168.2.120"
+
+TCP_SERVER_IP = "192.168.2.33"
 TCP_SERVER_PORT = 12345
+
 PACKET_HEADER = 0xAA
 DB_PACKET_SIZE = 15 # 1(header) + 2(command) + 4(uid) + 8(floats)
 VF_PACKET_SIZE = 7
 VF_RESPONSE_SIZE = 4 # 1(header) + 2(command) + 1(VF_RESP)
 LS_PACKET_SIZE = 4 # 1(header) + 2(command) + 1(VF_RESP)
 UR_PACKET_SIZE = 7
+
 temp_queue = queue.Queue()
 shock_queue = queue.Queue()
 cmd_queue = queue.Queue(maxsize=2)
@@ -161,9 +166,9 @@ def main():
 
 # GUI ---------------------
 
-MAIN_UI = "/home/lee/project/self_drive/vehicle_gui/main.ui"
-STATUS_UI = "/home/lee/project/self_drive/vehicle_gui/status.ui"
-INFO_UI = "/home/lee/project/self_drive/vehicle_gui/info.ui"
+MAIN_UI = "/home/john/dev_ws/yolo/main.ui"
+STATUS_UI = "/home/john/dev_ws/yolo/status.ui"
+INFO_UI = "/home/john/dev_ws/yolo/info.ui"
 
 main_window = uic.loadUiType(MAIN_UI)[0]
 status_window = uic.loadUiType(STATUS_UI)[0]
