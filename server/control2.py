@@ -503,6 +503,23 @@ class StatusWindow(QWidget, status_window):
 
         self.poll_data_from_thread()
 
+    def load_driver_data(self):
+        try:
+            conn = get_db_connection()
+            with conn.cursor() as cur:
+                cur.execute("SELECT temperature, shock FROM sensor_data ORDER BY id DESC LIMIT 1")
+                results = cur.fetchall()
+                self.temp_edit.clear()
+                self.shock_edit.clear()
+
+                for temp, shock in results:
+                    self.updateStatus(temp, shock)
+
+        except Exception as e:
+            print(f"[DB LOAD ERROR] {e}")
+        finally:
+            conn.close()
+
     def updateStatus(self, temp, shock):
         self.temp_edit.setText(f'{temp} °C')
         self.shock_edit.setText(f'{shock} times')
@@ -533,7 +550,7 @@ class InfoWindow(QWidget,info_window):
 
         self.data_poll_timer3 = QTimer()
         self.data_poll_timer3.timeout.connect(self.poll_data_from_thread)
-        self.data_poll_timer3.start(5000)
+        self.data_poll_timer3.start(3000)
 
         self.poll_data_from_thread()
 
@@ -545,7 +562,7 @@ class InfoWindow(QWidget,info_window):
                 results = cur.fetchall()
                 self.driverText.clear()
                 for temp, shock in results:
-                    self.updateDisplay(f"Temp: {temp} °C, Shock: {shock} times")
+                    self.updateDisplay(f"Drive Skill Overall")
 
         except Exception as e:
             print(f"[DB LOAD ERROR] {e}")
@@ -556,7 +573,7 @@ class InfoWindow(QWidget,info_window):
         self.parent.show()
         self.close()
 
-    def updateDisplay(self, message='Drive Safe'):
+    def updateDisplay(self, message="Displaying Information"):
         self.info_edit.setText(message)
         QTimer.singleShot(3000, self.info_edit.clear)
 
