@@ -57,7 +57,7 @@ def insert_to_db(uid_hex, shock, temp):
     try:
         conn = get_db_connection()
         with conn.cursor() as cur:
-            cur.execute("INSERT INTO sensor_data (uid, shock, temperature) VALUES (%s, %s)", (uid_hex, shock, temp))
+            cur.execute("INSERT INTO sensor_data (uid, shock, temperature) VALUES (%s, %s, %s)", (uid_hex, shock, temp))
     except Exception as e:
         print(f"[DB ERROR] {e}")
     finally:
@@ -87,7 +87,7 @@ def read_aligned_packet(ser):
                 if ser.in_waiting == 0:
                     packet = byte + cmd_bytes + lookahead
                     print(f"[RECV] VF Response: {packet.hex().upper()}")
-                    alc_queue.put(lookahead[0])
+                    alc_queue.put(chr(lookahead[0]))
                 # 아니면 요청 (나머지 3바이트 추가로 읽기 → 총 7바이트)
                 rest = ser.read(3)
                 if len(rest) == 3:
@@ -96,12 +96,12 @@ def read_aligned_packet(ser):
                     return packet
             elif command == "LS":
                 rest = ser.read(LS_PACKET_SIZE - 3)
-                if len(rest) == DB_PACKET_SIZE - 3:
+                if len(rest) == LS_PACKET_SIZE - 3:
                     ls_queue.put(rest[0])
 
             elif command == "UR":
                 rest = ser.read(UR_PACKET_SIZE - 3)
-                if len(rest) == DB_PACKET_SIZE - 3:
+                if len(rest) == UR_PACKET_SIZE - 3:
                     ur_queue.put(rest[0])
         else:
             continue
@@ -196,6 +196,8 @@ class RCController(QWidget):
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_command)
         self.timer.start(50)  # 20 FPS
+
+        self.auth_result = False
 
     def keyPressEvent(self, event):
         self.keys_pressed.add(event.key())
@@ -295,12 +297,12 @@ class RCController(QWidget):
         super().closeEvent(event)
 
     def checkAuth(self):
-        auth = alc_queue.get_nowait()
-
-        if auth == 0x01:
+        if any(pf == 'P' for pf in list(alc_queue.queue)[:]):
             return True
         else:
             return False
+
+
 
 
 # class SensorWorker(QObject):
@@ -363,12 +365,10 @@ class MainWindow(QWidget, main_window):
             self.power_btn.setText("OFF")
             self.status_btn.setEnabled(True)
             self.info_btn.setEnabled(True)
-            self.sensor_timer.start(1000)
         else:
             self.power_btn.setText("ON")
             self.status_btn.setEnabled(False)
             self.info_btn.setEnabled(False)
-            self.sensor_timer.stop()
 
     def show_status(self):
         self.status_window = StatusWindow(self)
@@ -380,7 +380,7 @@ class MainWindow(QWidget, main_window):
         self.info_window.show()
         self.hide()
 
-    def updateDisplay(self, message):
+    def updateDisplay(self, message="Drive Safe"):
         self.message_manager.show_message(message)
 
         self.main_edit.setText(message)
@@ -388,12 +388,13 @@ class MainWindow(QWidget, main_window):
 
     def poll_data_from_thread(self):
         try:
-            if cmd_queue.queue[0] == "MB" or cmd_queue.queue[1] == "MB":
+            if any(cmd == "MB" for cmd in list(cmd_queue.queue)[:2]):
                 message = "You are Moving Backward"
-                dist = ur_queue.get_nowiat()
+                dist = ur_queue.get_nowait()
                 self.main_edit.setText(message)
             else:
                 self.main_edit.clear()
+
 
             if self.checkLight == 1:
                 message = "HeadLight ON"
@@ -413,9 +414,7 @@ class MainWindow(QWidget, main_window):
             pass
 
     def checkAuth(self):
-        auth = alc_queue.get_nowait()
-
-        if auth == 0x01:
+        if any(pf == 'P' for pf in list(alc_queue.queue)[:]):
             return True
         else:
             return False
@@ -551,7 +550,7 @@ class InfoWindow(QWidget,info_window):
     def poll_data_from_thread(self):
         try:
             shock = shock_queue.get_nowait()
-            temp = temp.queue.get_nowait()
+            temp = temp_queue.get_nowait()
             self.updateDisplay(f"{shock}times \n {temp}°C")
 
         except queue.Empty:
