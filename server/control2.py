@@ -338,6 +338,7 @@ class MainWindow(QWidget, main_window):
         self.setWindowTitle("Main")
 
         self.power_on = False
+        self.light_on = False
 
         # 타이머
         self.clock_timer = QTimer()
@@ -387,7 +388,23 @@ class MainWindow(QWidget, main_window):
         self.info_window.show()
         self.hide()
 
-    def updateDisplay(self, message='Waiting for update'):
+    def updateDisplay(self, message):
+        if cmd_queue.queue[0] == "MB" or cmd_queue.queue[1] == "MB":
+            message = "You are Moving Backward"
+            dist = ur_queue.get_nowiat()
+            self.main_edit.setText(message)
+
+        elif self.checkLight == 1:
+            message = "HeadLight ON"
+        elif self.checkLight == 2:
+            message = "HeadLight OFF"
+
+        else:
+            if self.checkAuth() == True:
+                message = "Hello! Drive Safe"
+            else:
+                message = "You are DRUNK!!!"
+
         self.main_edit.setText(message)
         QTimer.singleShot(3000, self.main_edit.clear)
 
@@ -401,6 +418,27 @@ class MainWindow(QWidget, main_window):
     #     except queue.Empty:
     #         pass
 
+    def checkAuth(self):
+        auth = alc_queue.get_nowait()
+
+        if auth == 0x01:
+            return True
+        else:
+            return False
+
+    def checkDist(self):
+        if ur_queue == 
+
+    def checkLight(self):
+        if ls_queue == 0x01:
+            if self.light_on == False:
+                self.light_on = True
+                return 1
+        else:
+            if self.light_on == True:
+                self.light_on = False
+                return 2
+
 class StatusWindow(QWidget, status_window):
     def __init__(self, parent):
         super().__init__()
@@ -408,8 +446,6 @@ class StatusWindow(QWidget, status_window):
         self.setWindowTitle("Status")
         self.parent = parent
 
-        # self.temp_edit.setText("--°C")
-        # self.shock_edit.setText("-- times")
         self.updateStatus(0, 0)
 
         # 데이터 들어있는 queue 주기적으로 체크
@@ -430,7 +466,7 @@ class StatusWindow(QWidget, status_window):
             shock = shock_queue.get_nowait()
             temp = temp_queue.get_nowait()
             self.updateStatus(shock, temp)
-            shock_queue.empty() # queue를 비우려는 목적인가요
+
         except queue.Empty:
             pass
 
@@ -483,7 +519,7 @@ class InfoWindow(QWidget,info_window):
             shock = shock_queue.get_nowait()
             temp = temp.queue.get_nowait()
             self.updateDisplay(f"{shock}times \n {temp}°C")
-            shock_queue.empty() # queue를 비우려는 목적인가요
+
         except queue.Empty:
             pass
 
