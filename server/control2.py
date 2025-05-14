@@ -322,13 +322,15 @@ class RCController(QWidget):
             return False
         
     def checkDist(self):
-        dist = ur_queue.queue[3:]
+        try:
+            dist = ur_queue.queue[-1]
 
-        if (dist <= 10):
-            return False
-        else:
-            True
-
+            if (dist <= 10.0):
+                return False
+            else:
+                return True
+        except queue.Empty:
+            pass
         
 class OutsideDisplay(QWidget, out_window):
 
@@ -436,10 +438,11 @@ class MainWindow(QWidget, main_window):
             if self.power_on == False: 
                 if self.checkAuth() == True:
                     self.message = "Hello! Drive Safe"
+                    self.updateDisplay(self.message)
                 # else:
                 #     self.message = "You are DRUNK!!!"
 
-                self.updateDisplay(self.message)
+                
 
             else:
                 if any(cmd == "MB" for cmd in list(cmd_queue.queue)[:2]):
@@ -452,10 +455,12 @@ class MainWindow(QWidget, main_window):
 
                 if self.checkLight == 1:
                     self.message = "HeadLight ON"
+                    self.updateDisplay(self.message)
                 if self.checkLight == 2:
                     self.message = "HeadLight OFF" 
+                    self.updateDisplay(self.message)
 
-                self.updateDisplay(self.message)
+                
                 
         except queue.Empty:
             pass
@@ -467,17 +472,20 @@ class MainWindow(QWidget, main_window):
             return False
 
     def checkDist(self):
-        dist = int(ur_queue.queue[3:])
+        try:
+            dist = int(ur_queue.queue[3:])
 
-        self.updateDisplay(dist)
-        temp = 0
+            self.updateDisplay(dist)
+            temp = 0
 
-        if (dist <= 10):
-            self.updateDisplay("WARNING : Too close")
-        elif (dist < temp):
-            self.updateDisplay("Getting Closer")
+            if (dist <= 10):
+                self.updateDisplay("WARNING : Too close")
+            elif (dist < temp):
+                self.updateDisplay("Getting Closer")
 
-        temp = dist
+            temp = dist
+        except queue.Empty:
+            pass
 
     def checkLight(self):
         if ls_queue == 0x01:
