@@ -16,8 +16,8 @@ import pymysql
 from dbutils.pooled_db import PooledDB
 import threading
 
-SERIAL_PORT = "/dev/ttyACM1"
-SERIAL_PORT2 = "/dev/ttyACM0"
+SERIAL_PORT = "/dev/ttyACM0"
+SERIAL_PORT2 = "/dev/ttyACM1"
 
 BAUD_RATE = 9600
 TIMEOUT_S = 1.0
@@ -110,6 +110,7 @@ def read_aligned_packet(ser):
         else:
             continue
 def listen_response(sock, ser):
+    sock.settimeout(1.0)
     while True:
         try:
             resp = sock.recv(VF_RESPONSE_SIZE)
@@ -119,25 +120,29 @@ def listen_response(sock, ser):
                     print(f"[RESP] VF response from PC2: {resp}")
                     ser.write(resp)
                     uid_queue.put(resp[3])
-            # 큐에서 명령을 확인하고, "MB"가 있으면 "MB"를 전송하고, 없으면 "ST"를 전송
-            if not cmd_queue.empty():
-                # 큐에서 모든 명령을 확인
-                queue_items = []
-                while not cmd_queue.empty():
-                    queue_items.append(cmd_queue.get_nowait())
-                # "MB"가 있으면 "MB" 보내기, 없으면 "ST" 보내기
-                packet = bytearray()
-                packet.append(PACKET_HEADER)
-                if "MB" in queue_items:
-                    packet += b'MB'
-                else:
-                    packet += b'ST'
-                packet.append(0x00)  # 명령의 끝 부분을 0x00으로 설정
-                ser.write(packet)
-                print(f"[CMD] Sent: {packet.hex()}")
+        except socket.timeout:
+            pass
         except Exception as e:
             print(f"[TCP Read Error] {e}")
             break
+
+        # 큐에서 명령을 확인하고, "MB"가 있으면 "MB"를 전송하고, 없으면 "ST"를 전송
+        if not cmd_queue.empty():
+            # 큐에서 모든 명령을 확인
+            queue_items = []
+            while not cmd_queue.empty():
+                queue_items.append(cmd_queue.get_nowait())
+            # "MB"가 있으면 "MB" 보내기, 없으면 "ST" 보내기
+            packet = bytearray()
+            packet.append(PACKET_HEADER)
+            if "MB" in queue_items:
+                packet += b'MB'
+            else:
+                packet += b'ST'
+            packet.append(0x00)  # 명령의 끝 부분을 0x00으로 설정
+            ser.write(packet)
+            print(f"[CMD] Sent: {packet.hex()}")
+        
 def main():
     try:
         with serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=TIMEOUT_S) as ser, \
@@ -332,19 +337,19 @@ class OutsideDisplay(QWidget, out_window):
     def check_uid_queue(self):
         try:
             if not uid_queue.empty():
-                self.updateDisplay(uid_queue)
+                self.updateDisplay(uid_queue.queue)
 
         except queue.Empty:
             pass
 
     def updateDisplay(self, uid):
         if any(pf == 0x01 for pf in list(uid)[:]) and self.open == False:
-            message = "Welcome Back"
+            self.message = "Welcome Back"
             self.open = True
         else:
-            message = "Wrong UID"
+            self.message = "Wrong UID"
 
-        self.display.setText(message)
+        self.display.setText(self.message)
         QTimer.singleShot(3000, self.display.clear)
 
 class MainWindow(QWidget, main_window):
@@ -423,27 +428,27 @@ class MainWindow(QWidget, main_window):
         try:
             if self.power_on == False:  
                 if self.checkAuth() == True:
-                    message = "Hello! Drive Safe"
+                    self.message = "Hello! Drive Safe"
                 else:
-                    message = "You are DRUNK!!!"
+                    self.message = "You are DRUNK!!!"
 
-                self.updateDisplay(message)
+                self.updateDisplay(self.message)
 
             else:
                 if any(cmd == "MB" for cmd in list(cmd_queue.queue)[:2]):
-                    message = "You are Moving Backward"
-                    self.main_edit.setText(message)
+                    self.message = "You are Moving Backward"
+                    self.main_edit.setText(self.message)
                     self.checkDist()
                     
                 else:
                     self.main_edit.clear()
 
                 if self.checkLight == 1:
-                    message = "HeadLight ON"
+                    self.message = "HeadLight ON"
                 if self.checkLight == 2:
-                    message = "HeadLight OFF" 
+                    self.message = "HeadLight OFF" 
 
-                self.updateDisplay(message)
+                self.updateDisplay(self.message)
                 
         except queue.Empty:
             pass
