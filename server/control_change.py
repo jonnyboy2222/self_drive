@@ -188,6 +188,17 @@ status_window = uic.loadUiType(STATUS_UI)[0]
 info_window = uic.loadUiType(INFO_UI)[0]
 out_window = uic.loadUiType(OUT_DISP_UI)[0]
 
+def getDistance():
+    try:
+        if not ur_queue.empty():
+            raw = ur_queue.get()  # 4바이트 바이트열
+            dist = struct.unpack('f', raw)[0]  # little endian float 추출
+
+            return dist
+            
+    except queue.Empty:
+        pass
+
 class RCController(QWidget):
     def __init__(self):
         super().__init__()
@@ -324,16 +335,23 @@ class RCController(QWidget):
             return False
 
     def checkDist(self):
-        try:
-            if not ur_queue.empty():
-                raw = ur_queue.get()  # 4바이트 바이트열
-                dist = struct.unpack('f', raw)[0]  # little endian float 추출
+        dist = getDistance()
 
-                if dist <= 10.0:
-                    return False
+        if dist <= 10.0:
+            return False
+        else:
+            return True
+
+        # try:
+        #     if not ur_queue.empty():
+        #         raw = ur_queue.get()  # 4바이트 바이트열
+        #         dist = struct.unpack('f', raw)[0]  # little endian float 추출
+
+        #         if dist <= 10.0:
+        #             return False
                 
-        except queue.Empty:
-            pass
+        # except queue.Empty:
+        #     pass
 
         
 class OutsideDisplay(QWidget, out_window):
@@ -478,20 +496,31 @@ class MainWindow(QWidget, main_window):
             return False
 
     def checkDist(self):
-        try:
-            if not ur_queue.empty():
-                raw = ur_queue.get()  # 4바이트 바이트열
-                dist = struct.unpack('f', raw)[0]  # little endian float 추출
-                self.updateDisplay(f"{dist:.1f} cm")
+        dist = getDistance()
 
-                if dist <= 10.0:
-                    self.updateDisplay("WARNING: Too close")
-                elif dist <= self.temp:
-                    self.updateDisplay("Getting closer")
+        self.update(f"{dist:.1f} cm")
+
+        if dist <= 10.0:
+            self.updateDisplay("WARNING: Too close")
+        elif dist <= self.temp:
+            self.updateDisplay("Getting closer")
+            
+        self.temp = dist
+
+        # try:
+        #     if not ur_queue.empty():
+        #         raw = ur_queue.get()  # 4바이트 바이트열
+        #         dist = struct.unpack('f', raw)[0]  # little endian float 추출
+        #         self.updateDisplay(f"{dist:.1f} cm")
+
+        #         if dist <= 10.0:
+        #             self.updateDisplay("WARNING: Too close")
+        #         elif dist <= self.temp:
+        #             self.updateDisplay("Getting closer")
                 
-                self.temp = dist
-        except queue.Empty:
-            pass
+        #         self.temp = dist
+        # except queue.Empty:
+        #     pass
 
 
     def checkLight(self):
@@ -577,8 +606,11 @@ if __name__ == "__main__":
     threading.Thread(target=main, daemon=True).start()
 
     app = QApplication(sys.argv)
-    window1 = RCController()
-    window1.show()
+    # window1 = RCController()
+    # window1.show()
+
+    control = RCController()
+    control.start()
 
     window2 = OutsideDisplay()
     window2.show()

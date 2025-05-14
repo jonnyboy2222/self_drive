@@ -464,7 +464,6 @@ class MainWindow(QWidget, main_window):
                     self.updateDisplay(self.message)
 
                 
-                
         except queue.Empty:
             pass
 
