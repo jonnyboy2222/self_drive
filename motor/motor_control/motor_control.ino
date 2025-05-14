@@ -29,7 +29,7 @@ class MotorControl {
       analogWrite(in6, speed);
     }
 
-    void moveBackward(int speed = 150) {
+    void moveBackward(int speed = 80) {
       digitalWrite(in1, LOW);
       digitalWrite(in2, HIGH);
       digitalWrite(in3, LOW);
