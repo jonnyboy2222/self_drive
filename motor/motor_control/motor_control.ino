@@ -1,5 +1,3 @@
-#include <Servo.h>
-
 class MotorControl {
   private:
     int in1, in2, in3, in4, in5, in6;
@@ -106,8 +104,8 @@ void handleCommand(String cmd) {
   } else if (cmd.length() > 0) {
     char action = cmd.charAt(1);
     switch (action) {
-      case 'F': motor.moveForward(); break;
-      case 'B': motor.moveBackward(); break;
+      case 'F': motor.moveForward(speed); break;
+      case 'B': motor.moveBackward(speed); break;
       case 'L': motor.turnLeft(); break;
       case 'R': motor.turnRight(); break;
       case 'S': motor.stopMotors(); break;

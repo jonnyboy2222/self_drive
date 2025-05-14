@@ -207,8 +207,6 @@ class RCController(QWidget):
         self.timer.timeout.connect(self.update_command)
         self.timer.start(50)  # 20 FPS
 
-        self.auth = False
-
     def keyPressEvent(self, event):
         self.keys_pressed.add(event.key())
 
@@ -220,7 +218,7 @@ class RCController(QWidget):
             print("Serial port /dev/ttyACM1 not available. Cannot send command.")
             return 
         try:
-            if self.auth == True:
+            if self.checkAuth() == True:
                 # 모터 제어 (전진/후진)
                 if Qt.Key.Key_W in self.keys_pressed:
                     self.ser.write(b'MF\n')
@@ -305,6 +303,15 @@ class RCController(QWidget):
                 pass 
             self.ser.close()
         super().closeEvent(event)
+
+    def checkAuth(self):
+        auth = alc_queue.get_nowait()
+
+        if auth == 0x01:
+            return True
+        else:
+            return False
+
 
 # class SensorWorker(QObject):
 #     data_updated = pyqtSignal(float, float, bool)
