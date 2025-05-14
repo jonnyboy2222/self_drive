@@ -96,8 +96,8 @@ class WindowClass(QMainWindow, from_class):
             check_res = self.send_tcp_data(check_data, self.host, self.port)
             if check_res:
                 try:
-                    res_json = json.loads(check_res.decode())
-                    if res_json.get("message") == "PASS":
+                    res_json = json.loads(check_res)
+                    if res_json.get("message") == "FAIL":
                         self.enable()
                         self.editUid.setText(data)
                         self.labelStatus.setText("인식 완료!")
@@ -182,18 +182,21 @@ class WindowClass(QMainWindow, from_class):
                     "phone_num" : self.tableWidget.item(row, 5).text(),
                     "license_num" : self.tableWidget.item(row, 6).text()
                 }
-                insert_res = self.send_tcp_data(self, value_data, self.host, self.port)
+                insert_res = self.send_tcp_data(value_data, self.host, self.port)
                 if insert_res:
-                    in_res_json = json.loads(insert_res.decode())
+                    in_res_json = json.loads(insert_res)
                     if in_res_json.get("message") == "PASS":
                         message = "데이터 등록 성공"
                         QMessageBox.information(self, "등록 결과", message)
+                        # 모든 행 제거
+                        self.tableWidget.setRowCount(0)
+                        self.disable()
                         #self.labelStatus.setText(message)
                     else:
                         #self.labelStatus.setText("모든 데이터가 이미 등록되어 있습니다.")
                         error_msg = "등록 실패!"
                         QMessageBox.warning(
-                            self, "등록 오류", error_msg)
+                            self, "등록 오류", error_msg)          
                             
         except Exception as e:
             QMessageBox.warning(self, "등록 오류", f"JSON 파싱 오류:{e}")
