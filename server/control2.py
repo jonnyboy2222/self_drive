@@ -355,8 +355,8 @@ class OutsideDisplay(QWidget, out_window):
         if any(pf == 0x01 for pf in list(uid)[:]) and self.open == False:
             self.message = "Welcome Back"
             self.open = True
-        else:
-            self.message = "Wrong UID"
+        # else:
+        #     self.message = "Wrong UID"
 
         self.display.setText(self.message)
         QTimer.singleShot(3000, self.display.clear)
