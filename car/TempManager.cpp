@@ -14,30 +14,38 @@ void TempManager::update() {
   unsigned long currentMillis = millis();
   unsigned long curMillis2 = millis();
   if (currentMillis - previousMillis >= INTERVAL) {
-    previousMillis = currentMillis;
+    
+    // if (cnt == 10) {
+    //   temperature = temp_sum / 10;
+    //   cnt = 0;
+    //   temp_sum = 0;
+    // }
+    float temp_val = analogRead(tempSensorPin);
+    float voltage = temp_val * (5.0 / 1024.0);
+    temp = (voltage * 50);  // LM35 기준 섭씨 온도 환산
 
-    if (cnt == 10) {
-      temperature = temp_sum / 10;
-      cnt = 0;
-      temp_sum = 0;
-    }
+    temperature = temp;
 
     if (temperature > TEMP_THRESHOLD) {
       overtemperature = temperature;
     }
+    previousMillis = currentMillis;
   }
 
-  if (curMillis2 - prevMillis2 >= CHECK_INTV) {
-    prevMillis2 = curMillis2;
+  // if (curMillis2 - prevMillis2 >= CHECK_INTV) {
+    
 
-    cnt += 1;
+  //   cnt += 1;
 
-    int temp_val = analogRead(tempSensorPin);
-    float voltage = temp_val * (5.0 / 1024.0);
-    temp = voltage * 100;  // LM35 기준 섭씨 온도 환산
+  //   int temp_val = analogRead(tempSensorPin);
+  //   float voltage = temp_val * (5.0 / 1024.0);
+  //   temp = voltage * 100;  // LM35 기준 섭씨 온도 환산
 
-    temp_sum += temp;
-  }
+  //   temp_sum += temp;
+
+  //   prevMillis2 = curMillis2;
+  // }
+  
 }
 
 float TempManager::getCurrentTemperature() const {

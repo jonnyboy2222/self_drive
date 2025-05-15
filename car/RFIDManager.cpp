@@ -54,7 +54,6 @@ void RFIDManager::update()
   if (!isCardPresent && wasCardPresent)
   {
     wasCardPresent = false;
-    memset(UID, 0, 4);
   }
 }
 

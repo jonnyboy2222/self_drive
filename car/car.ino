@@ -21,7 +21,7 @@
 #define LED_PIN             47
 
 // Temperature
-#define TEMP_SENSOR_PIN     A10
+#define TEMP_SENSOR_PIN     A0
 
 // Ultrasonic & Buzzer
 #define TRIG_PIN            46
@@ -68,6 +68,8 @@ float ultrasonic;
 float shockVal = 0;
 float tempVal = 0;
 
+bool previousLightState = false;  // 이전 상태 저장
+
 
 void setup() {
   Serial.begin(BAUD_RATE);
@@ -96,7 +98,7 @@ void loop() {
 
     char send_buffer_db[DB_PACKET_SIZE];
 
-    shockVal = shockManager.getCountInWindow();
+    shockVal = shockManager.getLatestAverageShock();
     tempVal = tempManager.getCurrentTemperature();
 
     send_buffer_db[0] = PACKET_HEADER;
@@ -110,9 +112,10 @@ void loop() {
   // 수신 처리
 
   lightState = ambientLightManager.getLightState();
-  if (lightState == true) {
-    char send_buffer_ls[LS_PACKET_SIZE];
+  if (lightState != previousLightState) {
+    previousLightState = lightState;  // 상태 업데이트
 
+    char send_buffer_ls[LS_PACKET_SIZE];
     send_buffer_ls[0] = PACKET_HEADER;
     memcpy(send_buffer_ls + 1, CMD_LIGHT_STATE, 2);
     memcpy(send_buffer_ls + 3, &lightState, 1);
@@ -139,6 +142,7 @@ void loop() {
           authManager.handleResponse(false);
         }
       } else if (recv_buffer[1] == 'M' && recv_buffer[2] == 'B') {
+        obstacleManager.setReversing(true);
         ultrasonic = obstacleManager.getAvgDistance();
         char send_buffer_ur[UR_PACKET_SIZE];
         send_buffer_ur[0] = PACKET_HEADER;
@@ -146,6 +150,7 @@ void loop() {
         memcpy(send_buffer_ur + 3, &ultrasonic, 4);
         Serial.write((const uint8_t*)send_buffer_ur, UR_PACKET_SIZE);
       } else if (recv_buffer[1] == 'S' && recv_buffer[2] == 'T') {
+        obstacleManager.setReversing(false);
       }
       idx = 0;
     }

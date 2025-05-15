@@ -5,6 +5,8 @@
 #include "RFIDManager.h"
 #include "AlcoholManager.h"
 
+#include <MFRC522.h>
+
 class AuthManager {
   public:
     AuthManager(RFIDManager& r, AlcoholManager& a);

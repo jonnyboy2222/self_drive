@@ -24,7 +24,7 @@ SERIAL_PORT2 = "/dev/ttyACM1"
 BAUD_RATE = 9600
 TIMEOUT_S = 1.0
 
-TCP_SERVER_IP = "192.168.0.202"
+TCP_SERVER_IP = "192.168.2.33"
 TCP_SERVER_PORT = 12345
 
 PACKET_HEADER = 0xAA
@@ -83,8 +83,8 @@ def read_aligned_packet(ser):
                 if len(rest) == DB_PACKET_SIZE - 3:
                     uid = rest[:4]
                     if uid == b'\x00\x00\x00\x00':
-                        print("[RECV] Ignored DB packet with null UID")
-                        return  # 또는 그냥 return
+                        # print("[RECV] Ignored DB packet with null UID")
+                        return
                     packet = byte + cmd_bytes + rest
                     print(f"[RECV] DB Packet: {packet.hex().upper()}")
                     return packet
@@ -151,7 +151,7 @@ def listen_response(sock, ser):
                 packet += b'ST'
             packet.append(0x00)  # 명령의 끝 부분을 0x00으로 설정
             ser.write(packet)
-            print(f"[CMD] Sent: {packet.hex()}")
+            #print(f"[CMD] Sent: {packet.hex()}")
         
 def main():
     try:
@@ -178,7 +178,7 @@ def main():
                     else:
                         print("[PC1] Ignored DB packet with null UID")
                 sock.sendall(packet)
-                print(f"[PC1] Forwarded {command} to PC2")
+                #print(f"[PC1] Forwarded {command} to PC2")
                 time.sleep(0.01)
 
     except KeyboardInterrupt:
@@ -212,178 +212,6 @@ def getDistance():
         print(f"[getDistance ERROR] {e}")
     # return None
 
-
-
-
-class RCController(QWidget):
-    def __init__(self, parent=None, main_window=None):
-        super().__init__(parent)
-        self.main_window = main_window
-        self.setWindowTitle("RC카 제어기")
-        self.setFixedSize(200, 200)
-
-        self.ser = None
-        try:
-            self.ser = serial.Serial(SERIAL_PORT2, BAUD_RATE, timeout=TIMEOUT_S)
-            print(f"Successfully connected to {SERIAL_PORT2}")
-            time.sleep(1)
-        except serial.SerialException as e:
-            print(f"Error opening serial port {SERIAL_PORT2} : {e}. Please check the connection and permissions.")
-
-        self.keys_pressed = set()
-        self.speed = 150
-        self.speed_dir = 0
-
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.update_command)
-        self.timer.start(50)  # 20 FPS
-
-        self.auth_result = False
-
-        
-        
-
-
-    def keyPressEvent(self, event):
-        self.keys_pressed.add(event.key())
-
-    def keyReleaseEvent(self, event):
-        self.keys_pressed.discard(event.key())
-
-    def update_command(self):
-        if not self.ser or not self.ser.is_open:
-            print("Serial port /dev/ttyACM1 not available. Cannot send command.")
-            return 
-        try:
-            if (self.checkAuth() == True) and (self.checkEngine() == True):
-                # 모터 제어 (전진/후진)
-                if Qt.Key.Key_W in self.keys_pressed:
-                    self.ser.write(b'MF\n')
-                    # print(self.ser.readline(), 'MF')
-
-                    check = True
-                    if cmd_queue.full():
-                        cmd_queue.get_nowait()
-                    if check:
-                        cmd_queue.put("MF")
-                        check = False
-
-                elif Qt.Key.Key_S in self.keys_pressed:
-                    # dist = None
-
-                    # if not ur_queue.empty():
-                    #     raw = ur_queue.get_nowait()
-                    #     if len(raw) == 4:  # 데이터 길이 확인
-                    #         dist = struct.unpack('<f', raw)[0]
-                    #         print(f"dist received {dist}")
-
-                    if self.main_window.checkDist(self.main_window.dist):
-                        self.ser.write(b'MB\n')
-                    else:
-                        print("Motor Stop")
-                        self.ser.write(b'MS\n')
-                    # print(self.ser.readline(), 'MB')
-
-                    check = True
-                    if cmd_queue.full():
-                        cmd_queue.get_nowait()
-                    if check:
-                        cmd_queue.put("MB")
-                        check = False
-
-                elif Qt.Key.Key_A in self.keys_pressed:
-                    self.ser.write(b'TL\n')
-                    # print(self.ser.readline(), 'TL')
-
-                    check = True
-                    if cmd_queue.full():
-                        cmd_queue.get_nowait()
-                    if check:
-                        cmd_queue.put("TL")
-                        check = False
-
-                elif Qt.Key.Key_D in self.keys_pressed:
-                    self.ser.write(b'TR\n')
-                    # print(self.ser.readline(), 'TR')
-
-                    check = True
-                    if cmd_queue.full():
-                        cmd_queue.get_nowait()
-                    if check:
-                        cmd_queue.put("TR")
-                        check = False
-
-                else:
-                    self.ser.write(b'MS\n')
-                    # print(self.ser.readline(), 'MS')
-
-                    check = True
-                    if cmd_queue.full():
-                        cmd_queue.get_nowait()
-                    if check:
-                        cmd_queue.put("ST")
-                        check = False
-
-                # 속도 제어
-                if Qt.Key.Key_Q in self.keys_pressed and Qt.Key.Key_E not in self.keys_pressed:
-                    self.speed_dir = -1
-                elif Qt.Key.Key_E in self.keys_pressed and Qt.Key.Key_Q not in self.keys_pressed:
-                    self.speed_dir = 1
-                else:
-                    self.speed_dir = 0
-
-                if self.speed_dir != 0:
-                    self.speed += self.speed_dir * 10
-                    command = f"X{self.speed}\n"
-                    self.ser.write(command.encode())
-                    print(self.speed)
-        except serial.SerialException as e:
-            print(f"Serial write error on /dev/ttyACM0: {e}. Connection may be lost.")
-            if self.ser and self.ser.is_open:
-                self.ser.close() 
-
-    def closeEvent(self, event):
-        """Properly close the serial port when the application exits."""
-        if self.ser and self.ser.is_open:
-            print("Closing serial port /dev/ttyACM1.")
-            try:
-                self.ser.write(b'S\n') 
-            except serial.SerialException:
-                pass 
-            self.ser.close()
-        super().closeEvent(event)
-
-    def checkAuth(self):
-        if any(pf == 'P' for pf in list(alc_queue.queue)[:]):
-            return True
-        else:
-            return False
-    
-    def checkEngine(self):
-        if any(pf == 'ON' for pf in list(engine_queue.queue)[:]):
-            return True
-        else:
-            return False
-
-    # def checkDist(self, dist=None):
-    #     if dist <= 10.0:
-    #         return False
-    #     elif dist == None:
-    #         return True
-    #     else:
-    #         return True
-
-        # try:
-        #     if not ur_queue.empty():
-        #         raw = ur_queue.get()  # 4바이트 바이트열
-        #         dist = struct.unpack('f', raw)[0]  # little endian float 추출
-
-        #         if dist <= 10.0:
-        #             return False
-                
-        # except queue.Empty:
-        #     pass
-
         
 class OutsideDisplay(QWidget, out_window):
 
@@ -411,8 +239,8 @@ class OutsideDisplay(QWidget, out_window):
         if any(pf == 0x01 for pf in list(uid)[:]):
             self.message = "Welcome Back"
             self.open = True
-        # else:
-        #     self.message = "Wrong UID"
+        else:
+            self.message = "Wrong UID"
 
         self.display.setText(self.message)
         QTimer.singleShot(3000, self.display.clear)
@@ -424,7 +252,7 @@ class MainWindow(QWidget, main_window):
 
         self.setWindowTitle("Main")
 
-        self.rc_controller = RCController(main_window=self)
+        self.rc_controller = RCController(instance=self)
 
         self.power_on = False
         self.light_on = False
@@ -452,7 +280,7 @@ class MainWindow(QWidget, main_window):
         # 데이터 들어있는 queue 주기적으로 체크
         self.data_poll_timer = QTimer()
         self.data_poll_timer.timeout.connect(self.poll_data_from_thread)
-        self.data_poll_timer.start(1000)
+        self.data_poll_timer.start(500)
 
         self.message_manager = MessageManager(self.main_edit)
 
@@ -560,13 +388,13 @@ class MainWindow(QWidget, main_window):
 
     def checkDist(self, dist=None):
         if dist == None:
-            print("Dist None")
+            #print("Dist None")
             return True
-        elif dist > 10:
-            print("Dist > 10")
+        elif dist > 30:
+            #print("Dist > 10")
             return True
         else:
-            print("Dist < 10")
+            #print("Dist < 10")
             return False
 
     def checkAuth(self):
@@ -642,7 +470,178 @@ class MainWindow(QWidget, main_window):
         except queue.Empty:
             pass
 
-# shared_class = MainWindow()
+class RCController(QWidget):
+    def __init__(self, instance, parent=None):
+        super().__init__(parent)
+        self.instance = instance
+        self.setWindowTitle("RC카 제어기")
+        self.setFixedSize(200, 200)
+
+        self.ser = None
+        try:
+            self.ser = serial.Serial(SERIAL_PORT2, BAUD_RATE, timeout=TIMEOUT_S)
+            print(f"Successfully connected to {SERIAL_PORT2}")
+            time.sleep(1)
+        except serial.SerialException as e:
+            print(f"Error opening serial port {SERIAL_PORT2} : {e}. Please check the connection and permissions.")
+
+        self.keys_pressed = set()
+        self.speed = 150
+        self.speed_dir = 0
+
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update_command)
+        self.timer.start(50)  # 20 FPS
+
+        self.auth_result = False
+
+        
+        
+
+
+    def keyPressEvent(self, event):
+        self.keys_pressed.add(event.key())
+
+    def keyReleaseEvent(self, event):
+        self.keys_pressed.discard(event.key())
+
+    def update_command(self):
+        # if self.main_window_instance is None:
+        #     # print("[ERROR] main_window is not set in update_command")
+        #     return
+        if not self.ser or not self.ser.is_open:
+            print("Serial port /dev/ttyACM1 not available. Cannot send command.")
+            return
+        try:
+            if (self.checkAuth() == True) and (self.checkEngine() == True):
+                # 모터 제어 (전진/후진)
+                if Qt.Key.Key_W in self.keys_pressed:
+                    self.ser.write(b'MF\n')
+                    # print(self.ser.readline(), 'MF')
+
+                    check = True
+                    if cmd_queue.full():
+                        cmd_queue.get_nowait()
+                    if check:
+                        cmd_queue.put("MF")
+                        check = False
+
+                elif Qt.Key.Key_S in self.keys_pressed:
+                    # dist = None
+
+                    # if not ur_queue.empty():
+                    #     raw = ur_queue.get_nowait()
+                    #     if len(raw) == 4:  # 데이터 길이 확인
+                    #         dist = struct.unpack('<f', raw)[0]
+                    #         print(f"dist received {dist}")
+
+                    if self.instance.checkDist(self.instance.dist):
+                        self.ser.write(b'MB\n')
+                    else:
+                        #print("Motor Stop")
+                        self.ser.write(b'MS\n')
+                    # print(self.ser.readline(), 'MB')
+
+                    check = True
+                    if cmd_queue.full():
+                        cmd_queue.get_nowait()
+                    if check:
+                        cmd_queue.put("MB")
+                        check = False
+
+                elif Qt.Key.Key_A in self.keys_pressed:
+                    self.ser.write(b'TL\n')
+                    # print(self.ser.readline(), 'TL')
+
+                    check = True
+                    if cmd_queue.full():
+                        cmd_queue.get_nowait()
+                    if check:
+                        cmd_queue.put("TL")
+                        check = False
+
+                elif Qt.Key.Key_D in self.keys_pressed:
+                    self.ser.write(b'TR\n')
+                    # print(self.ser.readline(), 'TR')
+
+                    check = True
+                    if cmd_queue.full():
+                        cmd_queue.get_nowait()
+                    if check:
+                        cmd_queue.put("TR")
+                        check = False
+
+                else:
+                    self.ser.write(b'MS\n')
+                    # print(self.ser.readline(), 'MS')
+
+                    check = True
+                    if cmd_queue.full():
+                        cmd_queue.get_nowait()
+                    if check:
+                        cmd_queue.put("ST")
+                        check = False
+
+                # 속도 제어
+                if Qt.Key.Key_Q in self.keys_pressed and Qt.Key.Key_E not in self.keys_pressed:
+                    self.speed_dir = -1
+                elif Qt.Key.Key_E in self.keys_pressed and Qt.Key.Key_Q not in self.keys_pressed:
+                    self.speed_dir = 1
+                else:
+                    self.speed_dir = 0
+
+                if self.speed_dir != 0:
+                    self.speed += self.speed_dir * 10
+                    command = f"X{self.speed}\n"
+                    self.ser.write(command.encode())
+                    print(self.speed)
+        except serial.SerialException as e:
+            print(f"Serial write error on /dev/ttyACM0: {e}. Connection may be lost.")
+            if self.ser and self.ser.is_open:
+                self.ser.close() 
+
+    def closeEvent(self, event):
+        """Properly close the serial port when the application exits."""
+        if self.ser and self.ser.is_open:
+            print("Closing serial port /dev/ttyACM1.")
+            try:
+                self.ser.write(b'S\n') 
+            except serial.SerialException:
+                pass 
+            self.ser.close()
+        super().closeEvent(event)
+
+    def checkAuth(self):
+        if any(pf == 'P' for pf in list(alc_queue.queue)[:]):
+            return True
+        else:
+            return False
+    
+    def checkEngine(self):
+        if any(pf == 'ON' for pf in list(engine_queue.queue)[:]):
+            return True
+        else:
+            return False
+
+    # def checkDist(self, dist=None):
+    #     if dist <= 10.0:
+    #         return False
+    #     elif dist == None:
+    #         return True
+    #     else:
+    #         return True
+
+        # try:
+        #     if not ur_queue.empty():
+        #         raw = ur_queue.get()  # 4바이트 바이트열
+        #         dist = struct.unpack('f', raw)[0]  # little endian float 추출
+
+        #         if dist <= 10.0:
+        #             return False
+                
+        # except queue.Empty:
+        #     pass
+
             
 class MessageManager:
     def __init__(self, text_edit: QTextEdit):
@@ -690,14 +689,14 @@ if __name__ == "__main__":
     # window1 = RCController()
     # window1.show()
 
-    control = RCController()
-    control.show()
-
     window2 = OutsideDisplay()
     window2.show()
 
     window = MainWindow()
     window.show()
+
+    control = RCController(instance=window)
+    control.show()
     
     sys.exit(app.exec())
 

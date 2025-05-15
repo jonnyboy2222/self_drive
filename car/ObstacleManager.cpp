@@ -42,8 +42,8 @@ void ObstacleManager::avgDistance()
     if (sampleindex == 0)
     {
       avg_distance = total_distance / SAMPLESIZE;
-      Serial.print("AVG_DISTANCE: ");
-      Serial.println(avg_distance);
+      //Serial.print("AVG_DISTANCE: ");
+      //Serial.println(avg_distance);
     }
   }
 }

@@ -1,9 +1,7 @@
 // #ifndef SHOCKMANAGER_H
 // #define SHOCKMANAGER_H
-
 // #include <Arduino.h>
-
-// class ShockManager 
+// class ShockManager
 // {
 //   private:
 //     uint8_t pin;
@@ -14,22 +12,17 @@
 //     int countInWindow;
 //     bool lastSensorState;
 //     float latest_average_shock;
-
 //   public:
 //     ShockManager(uint8_t sensorPin);
 //     void begin();
 //     void update();
 //     float getLatestAverageShock();
 // };
-
 // #endif
-
 #ifndef SHOCKMANAGER_H
 #define SHOCKMANAGER_H
-
 #include <Arduino.h>
-
-class ShockManager 
+class ShockManager
 {
   private:
     uint8_t pin;
@@ -40,7 +33,7 @@ class ShockManager
     int countInWindow;
     bool lastSensorState;
     float latest_average_shock;
-
+    int one_sec_sum;
   public:
     ShockManager(uint8_t sensorPin);
     void begin();
@@ -49,5 +42,4 @@ class ShockManager
     unsigned long getTimestamp();  // 타임스탬프 리턴
     int getCountInWindow();        // 1초 동안 감지된 충격 횟수 반환
 };
-
 #endif
