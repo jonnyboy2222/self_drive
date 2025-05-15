@@ -43,7 +43,7 @@
      <x>80</x>
      <y>260</y>
      <width>421</width>
-     <height>371</height>
+     <height>171</height>
     </rect>
    </property>
    <property name="readOnly">
@@ -61,32 +61,6 @@
    </property>
    <property name="text">
     <string>ON</string>
-   </property>
-  </widget>
-  <widget class="QPushButton" name="status_btn">
-   <property name="geometry">
-    <rect>
-     <x>180</x>
-     <y>200</y>
-     <width>88</width>
-     <height>21</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>Status</string>
-   </property>
-  </widget>
-  <widget class="QPushButton" name="info_btn">
-   <property name="geometry">
-    <rect>
-     <x>280</x>
-     <y>200</y>
-     <width>88</width>
-     <height>20</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>Info</string>
    </property>
   </widget>
   <widget class="QLabel" name="label_2">
@@ -108,6 +82,58 @@
      <x>140</x>
      <y>140</y>
      <width>341</width>
+     <height>26</height>
+    </rect>
+   </property>
+   <property name="readOnly">
+    <bool>true</bool>
+   </property>
+  </widget>
+  <widget class="QLineEdit" name="shock_edit">
+   <property name="geometry">
+    <rect>
+     <x>160</x>
+     <y>510</y>
+     <width>261</width>
+     <height>26</height>
+    </rect>
+   </property>
+   <property name="readOnly">
+    <bool>true</bool>
+   </property>
+  </widget>
+  <widget class="QLabel" name="label_3">
+   <property name="geometry">
+    <rect>
+     <x>80</x>
+     <y>460</y>
+     <width>66</width>
+     <height>18</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Temp</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="label_4">
+   <property name="geometry">
+    <rect>
+     <x>80</x>
+     <y>510</y>
+     <width>66</width>
+     <height>18</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Shock</string>
+   </property>
+  </widget>
+  <widget class="QLineEdit" name="temp_edit">
+   <property name="geometry">
+    <rect>
+     <x>160</x>
+     <y>460</y>
+     <width>261</width>
      <height>26</height>
     </rect>
    </property>
