@@ -24,7 +24,7 @@ SERIAL_PORT2 = "/dev/ttyACM1"
 BAUD_RATE = 9600
 TIMEOUT_S = 1.0
 
-TCP_SERVER_IP = "192.168.2.33"
+TCP_SERVER_IP = "192.168.0.202"
 TCP_SERVER_PORT = 12345
 
 PACKET_HEADER = 0xAA
@@ -38,7 +38,7 @@ temp_queue = queue.Queue()
 shock_queue = queue.Queue()
 cmd_queue = queue.Queue(maxsize=2)
 alc_queue = queue.Queue()
-ls_queue = queue.Queue()
+ls_queue = queue.Queue(maxsize=1)
 ur_queue = queue.Queue()
 uid_queue = queue.Queue()
 engine_queue = queue.Queue()
@@ -81,6 +81,10 @@ def read_aligned_packet(ser):
             if command == "DB":
                 rest = ser.read(DB_PACKET_SIZE - 3)
                 if len(rest) == DB_PACKET_SIZE - 3:
+                    uid = rest[:4]
+                    if uid == b'\x00\x00\x00\x00':
+                        print("[RECV] Ignored DB packet with null UID")
+                        return  # 또는 그냥 return
                     packet = byte + cmd_bytes + rest
                     print(f"[RECV] DB Packet: {packet.hex().upper()}")
                     return packet
@@ -101,13 +105,17 @@ def read_aligned_packet(ser):
                     print(f"[RECV] VF Request: {packet.hex().upper()}")
                     return packet
             elif command == "LS":
+                print("CMD LS received")
                 rest = ser.read(LS_PACKET_SIZE - 3)
                 if len(rest) == LS_PACKET_SIZE - 3:
+                    print(f"Received LS byte : {rest[0]}")
                     ls_queue.put(rest[0])
 
             elif command == "UR":
+                print("CMD UR received")
                 rest = ser.read(UR_PACKET_SIZE - 3)
                 if len(rest) == UR_PACKET_SIZE - 3:
+                    print(f"Received UR byte : {rest}")
                     ur_queue.put(rest)
         else:
             continue
@@ -160,15 +168,19 @@ def main():
                 command = packet[1:3].decode("ascii", errors="replace")
                 if command == "DB":
                     uid_hex = packet[3:7].hex().upper()
-                    shock = struct.unpack('<f', packet[7:11])[0]
-                    temp = struct.unpack('<f', packet[11:15])[0]
-                    insert_to_db(uid_hex, shock, temp)
-                    shock_queue.put(f"{shock:.2f}")
-                    temp_queue.put(f"{temp:.2f}")
-                    print(f"[PC1] Stored DB: Shock={shock:.2f}, Temp={temp:.2f}")
+                    if uid_hex != "00000000":
+                        shock = struct.unpack('<f', packet[7:11])[0]
+                        temp = struct.unpack('<f', packet[11:15])[0]
+                        insert_to_db(uid_hex, shock, temp)
+                        shock_queue.put(f"{shock:.2f}")
+                        temp_queue.put(f"{temp:.2f}")
+                        print(f"[PC1] Stored DB: Shock={shock:.2f}, Temp={temp:.2f}")
+                    else:
+                        print("[PC1] Ignored DB packet with null UID")
                 sock.sendall(packet)
                 print(f"[PC1] Forwarded {command} to PC2")
                 time.sleep(0.01)
+
     except KeyboardInterrupt:
         print("\n[PC1] Exiting.")
     except Exception as e:
@@ -179,40 +191,44 @@ def main():
 # GUI ---------------------
 
 MAIN_UI = "/home/john/dev_ws/yolo/main.ui"
-STATUS_UI = "/home/john/dev_ws/yolo/status.ui"
-INFO_UI = "/home/john/dev_ws/yolo/info.ui"
+# STATUS_UI = "/home/john/dev_ws/yolo/status.ui"
+# INFO_UI = "/home/john/dev_ws/yolo/info.ui"
 OUT_DISP_UI = "/home/john/dev_ws/yolo/outside_disp.ui"
 
 main_window = uic.loadUiType(MAIN_UI)[0]
-status_window = uic.loadUiType(STATUS_UI)[0]
-info_window = uic.loadUiType(INFO_UI)[0]
+# status_window = uic.loadUiType(STATUS_UI)[0]
+# info_window = uic.loadUiType(INFO_UI)[0]
 out_window = uic.loadUiType(OUT_DISP_UI)[0]
 
 def getDistance():
     try:
         if not ur_queue.empty():
-            raw = ur_queue.get()  # 4바이트 바이트열
-            dist = struct.unpack('f', raw)[0]  # little endian float 추출
+            raw = ur_queue.get_nowait()
+            if len(raw) == 4:  # 데이터 길이 확인
+                dist = struct.unpack('<f', raw)[0]
+                print(f"dist received {dist}")
+                return dist
+    except Exception as e:
+        print(f"[getDistance ERROR] {e}")
+    # return None
 
-            return dist
-            
-    except queue.Empty:
-        pass
+
+
 
 class RCController(QWidget):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, parent=None, main_window=None):
+        super().__init__(parent)
+        self.main_window = main_window
         self.setWindowTitle("RC카 제어기")
         self.setFixedSize(200, 200)
 
         self.ser = None
         try:
             self.ser = serial.Serial(SERIAL_PORT2, BAUD_RATE, timeout=TIMEOUT_S)
-            self.ser2 = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=TIMEOUT_S)
-            print(f"Successfully connected to {SERIAL_PORT2} / {SERIAL_PORT}")
+            print(f"Successfully connected to {SERIAL_PORT2}")
             time.sleep(1)
         except serial.SerialException as e:
-            print(f"Error opening serial port {SERIAL_PORT2} / {SERIAL_PORT}: {e}. Please check the connection and permissions.")
+            print(f"Error opening serial port {SERIAL_PORT2} : {e}. Please check the connection and permissions.")
 
         self.keys_pressed = set()
         self.speed = 150
@@ -223,6 +239,10 @@ class RCController(QWidget):
         self.timer.start(50)  # 20 FPS
 
         self.auth_result = False
+
+        
+        
+
 
     def keyPressEvent(self, event):
         self.keys_pressed.add(event.key())
@@ -249,8 +269,19 @@ class RCController(QWidget):
                         check = False
 
                 elif Qt.Key.Key_S in self.keys_pressed:
-                    if self.checkDist():
+                    # dist = None
+
+                    # if not ur_queue.empty():
+                    #     raw = ur_queue.get_nowait()
+                    #     if len(raw) == 4:  # 데이터 길이 확인
+                    #         dist = struct.unpack('<f', raw)[0]
+                    #         print(f"dist received {dist}")
+
+                    if self.main_window.checkDist(self.main_window.dist):
                         self.ser.write(b'MB\n')
+                    else:
+                        print("Motor Stop")
+                        self.ser.write(b'MS\n')
                     # print(self.ser.readline(), 'MB')
 
                     check = True
@@ -334,13 +365,13 @@ class RCController(QWidget):
         else:
             return False
 
-    def checkDist(self):
-        dist = getDistance()
-
-        if dist <= 10.0:
-            return False
-        else:
-            return True
+    # def checkDist(self, dist=None):
+    #     if dist <= 10.0:
+    #         return False
+    #     elif dist == None:
+    #         return True
+    #     else:
+    #         return True
 
         # try:
         #     if not ur_queue.empty():
@@ -393,6 +424,8 @@ class MainWindow(QWidget, main_window):
 
         self.setWindowTitle("Main")
 
+        self.rc_controller = RCController(main_window=self)
+
         self.power_on = False
         self.light_on = False
         self.alc_test = False
@@ -405,19 +438,21 @@ class MainWindow(QWidget, main_window):
         self.clock_timer.start(1000)
         self.update_time()
 
+        self.dist = 0
+
         # 이벤트 연결
         self.power_btn.clicked.connect(self.toggle_power)
-        self.status_btn.clicked.connect(self.show_status)
-        self.info_btn.clicked.connect(self.show_info)
+        # self.status_btn.clicked.connect(self.show_status)
+        # self.info_btn.clicked.connect(self.show_info)
 
         # 비활성화
-        self.status_btn.setEnabled(False)
-        self.info_btn.setEnabled(False)
+        # self.status_btn.setEnabled(False)
+        # self.info_btn.setEnabled(False)
 
         # 데이터 들어있는 queue 주기적으로 체크
         self.data_poll_timer = QTimer()
         self.data_poll_timer.timeout.connect(self.poll_data_from_thread)
-        self.data_poll_timer.start(5000)
+        self.data_poll_timer.start(1000)
 
         self.message_manager = MessageManager(self.main_edit)
 
@@ -431,26 +466,30 @@ class MainWindow(QWidget, main_window):
         # 데이터 들어있는 queue 주기적으로 체크
         self.data_poll_timer2 = QTimer()
         self.data_poll_timer2.timeout.connect(self.poll_data_from_thread2)
-        self.data_poll_timer2.start(5000)
+        self.data_poll_timer2.start(700)
 
         self.poll_data_from_thread2()
+
+        self.temp_edit.hide()
+        self.shock_edit.hide()
 
     def update_time(self):
         self.time_edit.setText(QTime.currentTime().toString("hh:mm:ss"))
 
+
     def toggle_power(self):
         if self.power_on == False:
             self.power_btn.setText("OFF")
-            self.status_btn.setEnabled(True)
-            self.info_btn.setEnabled(True)
+            self.temp_edit.show()
+            self.shock_edit.show()
             self.updateDisplay("Engine ON \n Drive Safe")
             engine_queue.put("ON")
             self.power_on = True
 
         else:
             self.power_btn.setText("ON")
-            self.status_btn.setEnabled(False)
-            self.info_btn.setEnabled(False)
+            self.temp_edit.hide()
+            self.shock_edit.hide()
             self.updateDisplay("Hope to see you again")
             engine_queue.put("OFF")
             self.power_on == False
@@ -472,22 +511,63 @@ class MainWindow(QWidget, main_window):
                 if any(cmd == "MB" for cmd in list(cmd_queue.queue)[:2]):
                     self.message = "You are Moving Backward"
                     self.main_edit.setText(self.message)
-                    self.checkDist()
+
+                    if not ur_queue.empty():
+                        raw = ur_queue.get_nowait()
+                        if len(raw) == 4:
+                            self.dist = struct.unpack('<f', raw)[0]
+                            print(f"dist received {self.dist}")
+                            
+                            # UI 갱신을 메인 스레드에서 실행
+                            self.main_edit.setText(f"Distance: {self.dist :.1f} cm")
+
+                            self.checkDist(self.dist)
+
+
+                            # self.updateDisplay(f"{self.dist} cm")
+                            # if self.dist <= 10.0:
+                            #     self.updateDisplay("WARNING: Too close")
+
+                            # self.checkDist(self.dist)
+
+                    else:
+                        self.checkDist(dist=None)
+
+                    
                     
                 else:
                     self.main_edit.clear()
 
-                if self.checkLight == 1:
-                    self.message = "HeadLight ON"
-                    self.updateDisplay(self.message)
-                if self.checkLight == 2:
-                    self.message = "HeadLight OFF" 
-                    self.updateDisplay(self.message)
+
+                light_value = self.checkLight()
+
+                if light_value == 1:
+                    if not self.light_on:
+                        self.message = "HeadLight ON"
+                        self.main_edit.setText(self.message)
+                        self.light_on = True
+                elif light_value == 0:
+                    if self.light_on:
+                        self.message = "HeadLight OFF" 
+                        self.main_edit.setText(self.message)
+                        self.light_on = False
+
 
                 
                 
         except queue.Empty:
             pass
+
+    def checkDist(self, dist=None):
+        if dist == None:
+            print("Dist None")
+            return True
+        elif dist > 10:
+            print("Dist > 10")
+            return True
+        else:
+            print("Dist < 10")
+            return False
 
     def checkAuth(self):
         if any(pf == 'P' for pf in list(alc_queue.queue)[:]):
@@ -495,17 +575,16 @@ class MainWindow(QWidget, main_window):
         else:
             return False
 
-    def checkDist(self):
-        dist = getDistance()
+    # def checkDist(self):
+        
+        # self.update(f"{dist:.1f} cm")
 
-        self.update(f"{dist:.1f} cm")
-
-        if dist <= 10.0:
-            self.updateDisplay("WARNING: Too close")
-        elif dist <= self.temp:
-            self.updateDisplay("Getting closer")
+        # if dist <= 10.0:
+        #     self.updateDisplay("WARNING: Too close")
+        # elif dist <= self.temp:
+        #     self.updateDisplay("Getting closer")
             
-        self.temp = dist
+        # self.temp = dist
 
         # try:
         #     if not ur_queue.empty():
@@ -524,14 +603,14 @@ class MainWindow(QWidget, main_window):
 
 
     def checkLight(self):
-        if ls_queue == 0x01:
-            if self.light_on == False:
-                self.light_on = True
+        try:
+            ls = ls_queue.get_nowait()
+            if ls == 1:
                 return 1
-        else:
-            if self.light_on == True:
-                self.light_on = False
-                return 2
+            else:
+                return 0
+        except queue.Empty:
+            pass
             
     def load_driver_data(self):
         try:
@@ -562,6 +641,8 @@ class MainWindow(QWidget, main_window):
 
         except queue.Empty:
             pass
+
+# shared_class = MainWindow()
             
 class MessageManager:
     def __init__(self, text_edit: QTextEdit):
@@ -578,7 +659,7 @@ class MessageManager:
             # 현재 표시 중인 메시지가 없으면 바로 표시
             self.current_message = msg
             self.text_edit.setPlainText(msg)
-            self.display_timer.start(2000)
+            self.display_timer.start(1000)
         else:
             # 표시 중이면 큐에 추가하고 두 줄로 출력
             self.message_queue.append(msg)
@@ -610,7 +691,7 @@ if __name__ == "__main__":
     # window1.show()
 
     control = RCController()
-    control.start()
+    control.show()
 
     window2 = OutsideDisplay()
     window2.show()
