@@ -274,6 +274,8 @@ class MainWindow(QWidget, main_window):
         # self.info_btn.clicked.connect(self.show_info)
 
         # 비활성화
+        self.power_btn.setEnabled(False)
+        self.dist_edit.hide()
         # self.status_btn.setEnabled(False)
         # self.info_btn.setEnabled(False)
 
@@ -300,6 +302,7 @@ class MainWindow(QWidget, main_window):
 
         self.temp_edit.hide()
         self.shock_edit.hide()
+        self.dist_edit.hide()
 
     def update_time(self):
         self.time_edit.setText(QTime.currentTime().toString("hh:mm:ss"))
@@ -331,12 +334,16 @@ class MainWindow(QWidget, main_window):
                 if self.checkAuth() == True:
                     self.message = "Hello! Drive Safe"
                     self.updateDisplay(self.message)
+                    self.power_btn.setEnabled(True)
                 else:
                     self.message = "Please authenticate first"
                     self.main_edit.setText(self.message)
                     if self.alc_test == True:
                         self.message = "You are drunk!!!!!"
                         self.updateDisplay(self.message)
+
+                    
+                        
 
             else:
                 if any(cmd == "MB" for cmd in list(cmd_queue.queue)[:2]):
@@ -350,7 +357,9 @@ class MainWindow(QWidget, main_window):
                             print(f"dist received {self.dist}")
                             
                             # UI 갱신을 메인 스레드에서 실행
-                            self.main_edit.setText(f"Distance: {self.dist :.1f} cm")
+                            # self.main_edit.setText(f"Distance: {self.dist :.1f} cm")
+                            self.dist_edit.show()
+                            self.dist_edit.setText(f"Distance: {self.dist :.1f} cm")
 
                             self.checkDist(self.dist)
 
@@ -375,17 +384,14 @@ class MainWindow(QWidget, main_window):
                 if light_value == 1:
                     if not self.light_on:
                         self.message = "HeadLight ON"
-                        self.main_edit.setText(self.message)
+                        self.light_edit.setText(self.message)
                         self.light_on = True
                 elif light_value == 0:
                     if self.light_on:
                         self.message = "HeadLight OFF" 
-                        self.main_edit.setText(self.message)
+                        self.light_edit.setText(self.message)
                         self.light_on = False
 
-
-                
-                
         except queue.Empty:
             pass
 

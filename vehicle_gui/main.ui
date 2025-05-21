@@ -41,9 +41,9 @@
    <property name="geometry">
     <rect>
      <x>80</x>
-     <y>260</y>
+     <y>310</y>
      <width>421</width>
-     <height>171</height>
+     <height>51</height>
     </rect>
    </property>
    <property name="readOnly">
@@ -54,7 +54,7 @@
    <property name="geometry">
     <rect>
      <x>80</x>
-     <y>200</y>
+     <y>220</y>
      <width>88</width>
      <height>26</height>
     </rect>
@@ -67,7 +67,7 @@
    <property name="geometry">
     <rect>
      <x>90</x>
-     <y>140</y>
+     <y>160</y>
      <width>66</width>
      <height>18</height>
     </rect>
@@ -80,7 +80,7 @@
    <property name="geometry">
     <rect>
      <x>140</x>
-     <y>140</y>
+     <y>160</y>
      <width>341</width>
      <height>26</height>
     </rect>
@@ -92,8 +92,8 @@
   <widget class="QLineEdit" name="shock_edit">
    <property name="geometry">
     <rect>
-     <x>160</x>
-     <y>510</y>
+     <x>180</x>
+     <y>450</y>
      <width>261</width>
      <height>26</height>
     </rect>
@@ -106,7 +106,7 @@
    <property name="geometry">
     <rect>
      <x>80</x>
-     <y>460</y>
+     <y>400</y>
      <width>66</width>
      <height>18</height>
     </rect>
@@ -119,7 +119,7 @@
    <property name="geometry">
     <rect>
      <x>80</x>
-     <y>510</y>
+     <y>450</y>
      <width>66</width>
      <height>18</height>
     </rect>
@@ -131,14 +131,66 @@
   <widget class="QLineEdit" name="temp_edit">
    <property name="geometry">
     <rect>
-     <x>160</x>
-     <y>460</y>
+     <x>180</x>
+     <y>400</y>
      <width>261</width>
      <height>26</height>
     </rect>
    </property>
    <property name="readOnly">
     <bool>true</bool>
+   </property>
+  </widget>
+  <widget class="QLineEdit" name="dist_edit">
+   <property name="geometry">
+    <rect>
+     <x>180</x>
+     <y>540</y>
+     <width>261</width>
+     <height>26</height>
+    </rect>
+   </property>
+   <property name="readOnly">
+    <bool>true</bool>
+   </property>
+  </widget>
+  <widget class="QLabel" name="label_5">
+   <property name="geometry">
+    <rect>
+     <x>80</x>
+     <y>540</y>
+     <width>81</width>
+     <height>18</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>HeadLight</string>
+   </property>
+  </widget>
+  <widget class="QLineEdit" name="dist_edit_2">
+   <property name="geometry">
+    <rect>
+     <x>180</x>
+     <y>590</y>
+     <width>261</width>
+     <height>26</height>
+    </rect>
+   </property>
+   <property name="readOnly">
+    <bool>true</bool>
+   </property>
+  </widget>
+  <widget class="QLabel" name="label_6">
+   <property name="geometry">
+    <rect>
+     <x>80</x>
+     <y>590</y>
+     <width>66</width>
+     <height>18</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Dist</string>
    </property>
   </widget>
  </widget>
