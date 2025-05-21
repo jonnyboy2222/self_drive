@@ -25,9 +25,9 @@ db_pool = PooledDB(
     maxconnections=5,
     mincached=2,
     host="localhost",
-    user="kth",
-    password="th0708csi!",
-    database="car_db",
+    user="root",
+    password="1120",
+    database="adminDB",
     charset="utf8mb4",
     autocommit=True
 )
@@ -39,7 +39,7 @@ def insert_to_db(uid_hex, shock, temp):
     try:
         conn = get_db_connection()
         with conn.cursor() as cur:
-            cur.execute("INSERT INTO sensor_data (uid, shock, temperature) VALUES (%s, %s)", (uid_hex, shock, temp))
+            cur.execute("INSERT INTO sensor_data (uid, shock, temperature) VALUES (%s, %s, %s)", (uid_hex, shock, temp))
     except Exception as e:
         print(f"[DB ERROR] {e}")
     finally:
