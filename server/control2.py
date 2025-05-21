@@ -373,6 +373,7 @@ class MainWindow(QWidget, main_window):
 
         self.power_on = False
         self.light_on = False
+        self.open = 1
 
         # 타이머
         self.clock_timer = QTimer()
@@ -442,7 +443,6 @@ class MainWindow(QWidget, main_window):
                 # else:
                 #     self.message = "You are DRUNK!!!"
 
-                
 
             else:
                 if any(cmd == "MB" for cmd in list(cmd_queue.queue)[:2]):

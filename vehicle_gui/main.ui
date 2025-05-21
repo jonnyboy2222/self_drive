@@ -141,7 +141,7 @@
     <bool>true</bool>
    </property>
   </widget>
-  <widget class="QLineEdit" name="dist_edit">
+  <widget class="QLineEdit" name="light_edit">
    <property name="geometry">
     <rect>
      <x>180</x>
@@ -167,7 +167,7 @@
     <string>HeadLight</string>
    </property>
   </widget>
-  <widget class="QLineEdit" name="dist_edit_2">
+  <widget class="QLineEdit" name="dist_edit">
    <property name="geometry">
     <rect>
      <x>180</x>

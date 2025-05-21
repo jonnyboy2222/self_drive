@@ -669,7 +669,7 @@ class MessageManager:
             # 현재 표시 중인 메시지가 없으면 바로 표시
             self.current_message = msg
             self.text_edit.setPlainText(msg)
-            self.display_timer.start(1000)
+            self.display_timer.start(3000)
         else:
             # 표시 중이면 큐에 추가하고 두 줄로 출력
             self.message_queue.append(msg)
@@ -681,7 +681,7 @@ class MessageManager:
             # 대기 메시지 있으면 교체
             self.current_message = self.message_queue.pop(0)
             self._refresh_display()
-            self.display_timer.start(2000)
+            self.display_timer.start(3000)
         else:
             # 없으면 모두 지움
             self.current_message = None
