@@ -190,10 +190,10 @@ def main():
 
 # GUI ---------------------
 
-MAIN_UI = "/home/john/dev_ws/yolo/main.ui"
+MAIN_UI = "/home/john/dev_ws/yolo/iot_project/main.ui"
 # STATUS_UI = "/home/john/dev_ws/yolo/status.ui"
 # INFO_UI = "/home/john/dev_ws/yolo/info.ui"
-OUT_DISP_UI = "/home/john/dev_ws/yolo/outside_disp.ui"
+OUT_DISP_UI = "/home/john/dev_ws/yolo/iot_project/outside_disp.ui"
 
 main_window = uic.loadUiType(MAIN_UI)[0]
 # status_window = uic.loadUiType(STATUS_UI)[0]
@@ -331,9 +331,12 @@ class MainWindow(QWidget, main_window):
                 if self.checkAuth() == True:
                     self.message = "Hello! Drive Safe"
                     self.updateDisplay(self.message)
-                    self.alc_test = True
                 else:
-                    self.message = "You are DRUNK!!!"
+                    self.message = "Please authenticate first"
+                    self.main_edit.setText(self.message)
+                    if self.alc_test == True:
+                        self.message = "You are drunk!!!!!"
+                        self.updateDisplay(self.message)
 
             else:
                 if any(cmd == "MB" for cmd in list(cmd_queue.queue)[:2]):
@@ -390,7 +393,7 @@ class MainWindow(QWidget, main_window):
         if dist == None:
             #print("Dist None")
             return True
-        elif dist > 30:
+        elif dist > 40:
             #print("Dist > 10")
             return True
         else:
@@ -399,8 +402,10 @@ class MainWindow(QWidget, main_window):
 
     def checkAuth(self):
         if any(pf == 'P' for pf in list(alc_queue.queue)[:]):
+            self.alc_test = True
             return True
-        else:
+        elif any(pf == 'F' for pf in list(alc_queue.queue)[:]):
+            self.alc_test = True
             return False
 
     # def checkDist(self):
@@ -571,7 +576,7 @@ class RCController(QWidget):
                         cmd_queue.put("TR")
                         check = False
 
-                else:
+                elif Qt.Key.Key_X in self.keys_pressed:
                     self.ser.write(b'MS\n')
                     # print(self.ser.readline(), 'MS')
 
